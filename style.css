@@ -1,0 +1,237 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+/* 100dvh: iOS Safariのブラウザバー分を除いた正確な画面高さ */
+#map {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+}
+
+.legend {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.92);
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    z-index: 400;
+    backdrop-filter: blur(4px);
+}
+
+.legend-item { display: flex; align-items: center; margin: 6px 0; gap: 8px; }
+.legend-pin { width: 13px; height: 21px; object-fit: contain; flex-shrink: 0; }
+.legend-line { width: 30px; height: 4px; border-radius: 2px; flex-shrink: 0; }
+
+.info-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    max-width: 300px;
+    z-index: 400;
+}
+
+.info-panel h2 { font-size: 16px; margin-bottom: 8px; color: #333; }
+.info-panel p { font-size: 12px; color: #666; margin: 4px 0; }
+.shop-count { font-size: 14px; font-weight: bold; color: #e74c3c; }
+
+.filter-panel {
+    background: rgba(255,255,255,0.92);
+    padding: 10px 14px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    backdrop-filter: blur(4px);
+    min-width: 120px;
+}
+
+.filter-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #ddd;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    margin: 5px 0;
+    font-size: 12px;
+    color: #333;
+}
+
+.filter-item input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.filter-pin {
+    width: 10px;
+    height: 16px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.update-date {
+    font-size: 10px;
+    color: #bbb;
+    margin-top: 6px;
+}
+
+/* ズームボタン(右端10px + 幅30px = 左端40px)の左に6px空けて配置 */
+.locate-btn {
+    position: absolute;
+    top: 10px;
+    right: 46px;
+    z-index: 1000;
+    width: 30px;
+    height: 30px;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #555;
+    padding: 0;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.locate-btn:hover {
+    background-color: #f0f4ff;
+    color: #2979FF;
+}
+
+.locate-btn:active {
+    background-color: #dce8ff;
+}
+
+/* ===== スマートフォン対応 ===== */
+@media (max-width: 600px) {
+
+    /* --- タイトルパネル --- */
+    /* right 指定で右側のLeafletコントロール(ズーム+フィルター)と重ならないよう動的に幅を制御 */
+    .info-panel {
+        top: 10px;
+        left: 10px;
+        right: 125px;
+        max-width: none;
+        padding: 8px 12px;
+        overflow-wrap: break-word;
+    }
+
+    .info-panel h2 {
+        font-size: 13px;
+        margin-bottom: 4px;
+    }
+
+    .shop-count {
+        font-size: 12px;
+    }
+
+    /* --- 凡例 --- */
+    /* 右上にコントロールが集中するため、モバイルでは左下に移動 */
+    /* 画面の短い端末でも収まるよう max-height + スクロールを設定 */
+    .legend {
+        bottom: 10px;
+        left: 10px;
+        right: auto;
+        padding: 8px 10px;
+        max-height: 42vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .legend-item {
+        margin: 3px 0;
+        gap: 6px;
+    }
+
+    /* span のインラインスタイル(font-size:12px)を !important で上書き */
+    .legend-item span {
+        font-size: 10px !important;
+        color: #333 !important;
+    }
+
+    .legend-pin {
+        width: 10px;
+        height: 16px;
+    }
+
+    .legend-line {
+        width: 22px;
+    }
+
+    /* --- フィルターパネル --- */
+    .filter-panel {
+        padding: 7px 10px;
+        min-width: 100px;
+    }
+
+    .filter-title {
+        font-size: 11px;
+        margin-bottom: 5px;
+        padding-bottom: 4px;
+    }
+
+    .filter-item {
+        font-size: 11px;
+        margin: 3px 0;
+    }
+
+    /* --- ポップアップ --- */
+    /* wrapper を画面幅に収める */
+    .leaflet-popup-content-wrapper {
+        max-width: calc(100vw - 50px) !important;
+    }
+
+    /* content 内の余白と折り返しを調整 */
+    .leaflet-popup-content {
+        margin: 10px 12px !important;
+        max-width: calc(100vw - 80px) !important;
+        overflow-wrap: break-word;
+        word-break: break-word;
+    }
+
+    /* 最外 div のインラインスタイル(min-width:240px / max-width:300px)を上書き */
+    .leaflet-popup-content > div {
+        min-width: auto !important;
+        max-width: 100% !important;
+    }
+
+    /* ポップアップ内テキストをモバイル向けに小さく */
+    .leaflet-popup-content h3 {
+        font-size: 13px !important;
+    }
+
+    .leaflet-popup-content p {
+        font-size: 11px !important;
+    }
+
+    /* 「詳細を検索」ボタンをタップしやすいサイズに */
+    .leaflet-popup-content a[target="_blank"] {
+        padding: 8px 14px !important;
+        font-size: 11px !important;
+        display: block !important;
+        text-align: center;
+    }
+
+    /* 現在地ボタン：タップしやすいサイズに拡大 */
+    .locate-btn {
+        width: 36px;
+        height: 36px;
+        top: 10px;
+        right: 46px;
+    }
+}
