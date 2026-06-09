@@ -164,7 +164,7 @@ if (typeof stations !== 'undefined') {
     });
 }
 
-// 駅一覧パネルを動的に生成
+// 駅一覧サイドバーのリストを動的に生成
 (function buildStationList() {
     const body = document.getElementById('stationListBody');
     if (!body || typeof stations === 'undefined') return;
@@ -173,6 +173,7 @@ if (typeof stations !== 'undefined') {
         item.className = 'station-list-item';
         item.textContent = `🚉 ${st.name}駅`;
         item.addEventListener('click', () => {
+            closeSidebar();
             map.flyTo([st.lat, st.lon], 15, { duration: 1.0 });
             const marker = stationMarkerMap[st.name];
             if (marker) setTimeout(() => marker.openPopup(), 1100);
@@ -180,6 +181,20 @@ if (typeof stations !== 'undefined') {
         body.appendChild(item);
     });
 })();
+
+// 駅一覧サイドバーの開閉制御
+function openSidebar() {
+    document.getElementById('stationSidebar').classList.add('open');
+    document.getElementById('stationSidebarOverlay').classList.add('open');
+}
+function closeSidebar() {
+    document.getElementById('stationSidebar').classList.remove('open');
+    document.getElementById('stationSidebarOverlay').classList.remove('open');
+}
+
+document.getElementById('stationToggleBtn').addEventListener('click', openSidebar);
+document.getElementById('stationSidebarClose').addEventListener('click', closeSidebar);
+document.getElementById('stationSidebarOverlay').addEventListener('click', closeSidebar);
 
 // ===================================================================
 // 現在地 & 最寄り店ロジック

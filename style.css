@@ -35,46 +35,92 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 
 /* ===================================================================
-   駅一覧パネル（左側・タイトルパネルの右隣）
+   駅一覧トグルボタン（左中央）
    =================================================================== */
-.station-list-panel {
+.station-toggle-btn {
     position: absolute;
-    top: 20px;
-    left: 310px;           /* タイトルパネル(max-width:290px) + 余白 */
-    width: 150px;
-    max-height: calc(100dvh - 60px);
-    background: rgba(255,255,255,0.96);
-    border-radius: 10px;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.20);
-    z-index: 400;
-    backdrop-filter: blur(6px);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.station-list-header {
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 500;
     background: #2980b9;
     color: white;
-    padding: 8px 12px;
+    border: none;
+    border-radius: 0 8px 8px 0;
+    padding: 18px 10px;
+    cursor: pointer;
+    font-family: inherit;
     font-size: 12px;
     font-weight: bold;
-    letter-spacing: 0.3px;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    letter-spacing: 2px;
+    box-shadow: 3px 2px 10px rgba(0,0,0,0.25);
+    transition: background 0.15s, padding 0.15s;
+    line-height: 1;
+}
+
+.station-toggle-btn:hover { background: #1a6dad; padding-left: 14px; }
+
+/* ===================================================================
+   駅一覧サイドバー（右から出現）
+   =================================================================== */
+.station-sidebar {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 230px;
+    height: 100dvh;
+    background: white;
+    z-index: 600;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.25);
+}
+
+.station-sidebar.open { transform: translateX(0); }
+
+.station-sidebar-header {
+    background: #2980b9;
+    color: white;
+    padding: 14px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     flex-shrink: 0;
 }
 
-.station-list-body {
+.station-sidebar-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.15s;
+    font-family: inherit;
+}
+
+.station-sidebar-close:hover { opacity: 1; }
+
+.station-sidebar-body {
     overflow-y: auto;
     flex: 1;
     -webkit-overflow-scrolling: touch;
 }
 
 .station-list-item {
-    padding: 7px 10px;
-    font-size: 11px;
+    padding: 13px 18px;
+    font-size: 13px;
     cursor: pointer;
     border-bottom: 1px solid #f0f0f0;
-    color: #444;
+    color: #333;
     transition: background 0.12s, color 0.12s;
     line-height: 1.4;
 }
@@ -82,6 +128,25 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .station-list-item:hover  { background: #e8f4fd; color: #1a6dad; }
 .station-list-item:active { background: #cce5f7; }
 .station-list-item:last-child { border-bottom: none; }
+
+/* サイドバー背景オーバーレイ */
+.station-sidebar-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100dvh;
+    background: rgba(0,0,0,0.35);
+    z-index: 590;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.station-sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
 
 /* ===================================================================
    タイトルパネル（左上）
@@ -410,13 +475,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
    =================================================================== */
 @media (max-width: 600px) {
 
-    /* --- 駅一覧パネル（モバイルではタイトルパネルの真下） --- */
-    .station-list-panel {
-        top: 120px;
-        left: 10px;
-        width: 140px;
-        max-height: calc(100dvh - 320px);
+    /* --- 駅一覧トグルボタン（モバイル） --- */
+    .station-toggle-btn {
+        padding: 14px 8px;
+        font-size: 11px;
     }
+
+    /* --- 駅一覧サイドバー（モバイルは幅広） --- */
+    .station-sidebar { width: min(80vw, 260px); }
 
     /* --- タイトルパネル --- */
     .info-panel {
