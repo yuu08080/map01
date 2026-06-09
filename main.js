@@ -33,8 +33,20 @@ const createIcon = (color) => new L.Icon({
 const redIcon  = createIcon('red');
 const blueIcon = createIcon('blue');
 
-// 駅用（グレーピン：チェーン店・個人店と同形・同サイズ）
-const stationIcon = createIcon('grey');
+// 駅用（グレーピン：ラーメン店と完全に同形・同サイズ、外部URL不要のSVG）
+const _GREY_PIN_URL = 'data:image/svg+xml;base64,' + btoa(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 41">' +
+    '<path fill="#808080" stroke="white" stroke-width="1.5"' +
+    ' d="M12.5 1C6.2 1 1 6.2 1 12.5c0 8.4 11.5 27.5 11.5 27.5S24 20.9 24 12.5C24 6.2 18.8 1 12.5 1z"/>' +
+    '<circle fill="white" cx="12.5" cy="12.5" r="4.5"/>' +
+    '</svg>'
+);
+const stationIcon = new L.Icon({
+    iconUrl: _GREY_PIN_URL,
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
+    shadowSize: [41, 41], shadowAnchor: [12, 41]
+});
 
 // 最寄り店ハイライト用（脈動アニメーション付き）
 const highlightIcon = L.divIcon({
@@ -381,8 +393,7 @@ const FilterControl = L.Control.extend({
             <div class="filter-divider"></div>
             <label class="filter-item">
                 <input type="checkbox" id="stationFilter" checked>
-                <img class="filter-pin"
-                     src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png">
+                <img class="filter-pin" src="${_GREY_PIN_URL}">
                 <span>駅</span>
             </label>
             <label class="filter-item">
