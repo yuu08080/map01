@@ -86,7 +86,8 @@ function buildPopupContent(shop) {
     const borderColor   = isChain ? '#3498db' : '#e74c3c';
     const shopType      = isChain ? '🏢 大手チェーン店' : '🍜 個人店・独立系';
     const shopTypeColor = isChain ? '#2980b9' : '#c0392b';
-    const searchUrl     = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
+    const searchUrl  = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
+    const gmapsUrl   = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
     return `
         <div style="font-family:sans-serif;min-width:240px;max-width:300px;">
             <p style="margin:0 0 4px 0;font-size:11px;color:${shopTypeColor};font-weight:bold;">${shopType}</p>
@@ -95,9 +96,13 @@ function buildPopupContent(shop) {
             <p style="margin:4px 0;font-size:12px;color:#333;word-wrap:break-word;"><b>📍 住所:</b> ${shop.address}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;background:#f8f9fa;padding:4px 6px;border-radius:3px;"><b>🚗 駐車場:</b> ${renderParking(shop.parking)}</p>
-            <div style="margin-top:10px;text-align:center;">
+            <div style="margin-top:10px;display:flex;gap:6px;">
+                <a href="${gmapsUrl}" target="_blank"
+                   style="flex:1;text-align:center;padding:7px 4px;background:#34A853;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;">
+                   🗺️ Google Mapで経路
+                </a>
                 <a href="${searchUrl}" target="_blank"
-                   style="display:inline-block;padding:6px 12px;background:#4285F4;color:white;text-decoration:none;border-radius:4px;font-size:12px;font-weight:bold;">
+                   style="flex:1;text-align:center;padding:7px 4px;background:#4285F4;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;">
                    🔍 詳細を検索
                 </a>
             </div>
@@ -145,16 +150,36 @@ const roadsLayerGroup = L.layerGroup().addTo(map);
 })();
 
 // ===================================================================
-// 駅レイヤー
+// 駅レイヤー & 駅一覧パネル
 // ===================================================================
 const stationsLayerGroup = L.layerGroup().addTo(map);
+const stationMarkerMap = {};  // name → marker（パネルクリック時のポップアップ用）
+
 if (typeof stations !== 'undefined') {
     stations.forEach(st => {
-        L.marker([st.lat, st.lon], { icon: stationIcon })
+        const marker = L.marker([st.lat, st.lon], { icon: stationIcon })
             .bindPopup(`<b>🚉 ${st.name}駅</b>`)
             .addTo(stationsLayerGroup);
+        stationMarkerMap[st.name] = marker;
     });
 }
+
+// 駅一覧パネルを動的に生成
+(function buildStationList() {
+    const body = document.getElementById('stationListBody');
+    if (!body || typeof stations === 'undefined') return;
+    stations.forEach(st => {
+        const item = document.createElement('div');
+        item.className = 'station-list-item';
+        item.textContent = `🚉 ${st.name}駅`;
+        item.addEventListener('click', () => {
+            map.flyTo([st.lat, st.lon], 15, { duration: 1.0 });
+            const marker = stationMarkerMap[st.name];
+            if (marker) setTimeout(() => marker.openPopup(), 1100);
+        });
+        body.appendChild(item);
+    });
+})();
 
 // ===================================================================
 // 現在地 & 最寄り店ロジック

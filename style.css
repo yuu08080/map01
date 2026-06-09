@@ -35,6 +35,55 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 
 /* ===================================================================
+   駅一覧パネル（左側・タイトルパネルの右隣）
+   =================================================================== */
+.station-list-panel {
+    position: absolute;
+    top: 20px;
+    left: 310px;           /* タイトルパネル(max-width:290px) + 余白 */
+    width: 150px;
+    max-height: calc(100dvh - 60px);
+    background: rgba(255,255,255,0.96);
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.20);
+    z-index: 400;
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.station-list-header {
+    background: #2980b9;
+    color: white;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+}
+
+.station-list-body {
+    overflow-y: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+}
+
+.station-list-item {
+    padding: 7px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    color: #444;
+    transition: background 0.12s, color 0.12s;
+    line-height: 1.4;
+}
+
+.station-list-item:hover  { background: #e8f4fd; color: #1a6dad; }
+.station-list-item:active { background: #cce5f7; }
+.station-list-item:last-child { border-bottom: none; }
+
+/* ===================================================================
    タイトルパネル（左上）
    =================================================================== */
 .info-panel {
@@ -360,6 +409,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
    スマートフォン対応（〜 600px）
    =================================================================== */
 @media (max-width: 600px) {
+
+    /* --- 駅一覧パネル（モバイルではタイトルパネルの真下） --- */
+    .station-list-panel {
+        top: 120px;
+        left: 10px;
+        width: 140px;
+        max-height: calc(100dvh - 320px);
+    }
 
     /* --- タイトルパネル --- */
     .info-panel {
