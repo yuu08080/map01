@@ -33,14 +33,8 @@ const createIcon = (color) => new L.Icon({
 const redIcon  = createIcon('red');
 const blueIcon = createIcon('blue');
 
-// 駅用（小型グレー円）
-const stationIcon = L.divIcon({
-    html: '<div class="station-marker-pin"></div>',
-    className: '',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-    popupAnchor: [0, -11]
-});
+// 駅用（グレーピン：チェーン店・個人店と同形・同サイズ）
+const stationIcon = createIcon('grey');
 
 // 最寄り店ハイライト用（脈動アニメーション付き）
 const highlightIcon = L.divIcon({
@@ -387,7 +381,8 @@ const FilterControl = L.Control.extend({
             <div class="filter-divider"></div>
             <label class="filter-item">
                 <input type="checkbox" id="stationFilter" checked>
-                <div class="filter-station-dot"></div>
+                <img class="filter-pin"
+                     src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png">
                 <span>駅</span>
             </label>
             <label class="filter-item">
@@ -496,6 +491,7 @@ document.querySelectorAll('.nearest-tab').forEach(tab => {
                 '[ラーメンマップ] 位置情報の取得に失敗しました（' + err.message + '）。' +
                 '柏駅をダミー現在地として使用します。'
             );
+            alert('位置情報の取得に失敗しました: ' + err.message);
             initUserPosition(FALLBACK_POS.lat, FALLBACK_POS.lng, true, null);
         },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
