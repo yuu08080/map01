@@ -11,11 +11,11 @@ const map = L.map('map', {
 
 L.control.zoom({ position: 'topright' }).addTo(map);
 
-// === タイルレイヤー（標準カラー地図：OpenStreetMap） ===
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-    maxNativeZoom: 19
+// === タイルレイヤー（標準カラー・日本語地図：国土地理院） ===
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+    maxZoom: 21,
+    maxNativeZoom: 18
 }).addTo(map);
 
 // ===================================================================
