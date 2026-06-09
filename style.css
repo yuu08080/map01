@@ -47,20 +47,18 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     color: white;
     border: none;
     border-radius: 0 8px 8px 0;
-    padding: 18px 10px;
+    padding: 10px 16px;
     cursor: pointer;
     font-family: inherit;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: bold;
-    writing-mode: vertical-rl;
-    text-orientation: upright;
-    letter-spacing: 2px;
+    white-space: nowrap;
     box-shadow: 3px 2px 10px rgba(0,0,0,0.25);
     transition: background 0.15s, padding 0.15s;
     line-height: 1;
 }
 
-.station-toggle-btn:hover { background: #1a6dad; padding-left: 14px; }
+.station-toggle-btn:hover { background: #1a6dad; padding-left: 20px; }
 
 /* ===================================================================
    駅一覧サイドバー（右から出現）
@@ -477,8 +475,8 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
     /* --- 駅一覧トグルボタン（モバイル） --- */
     .station-toggle-btn {
-        padding: 14px 8px;
-        font-size: 11px;
+        padding: 8px 12px;
+        font-size: 12px;
     }
 
     /* --- 駅一覧サイドバー（モバイルは幅広） --- */
