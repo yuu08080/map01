@@ -11,11 +11,12 @@ const map = L.map('map', {
 
 L.control.zoom({ position: 'topright' }).addTo(map);
 
-// === タイルレイヤー（標準カラー・日本語地図：国土地理院） ===
-L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+// === タイルレイヤー（Google Maps 標準） ===
+L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&hl=ja&x={x}&y={y}&z={z}', {
+    attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
+    subdomains: ['0', '1', '2', '3'],
     maxZoom: 21,
-    maxNativeZoom: 18
+    maxNativeZoom: 20
 }).addTo(map);
 
 // ===================================================================
@@ -92,14 +93,13 @@ function buildPopupContent(shop) {
         <div style="font-family:sans-serif;min-width:240px;max-width:300px;">
             <p style="margin:0 0 4px 0;font-size:11px;color:${shopTypeColor};font-weight:bold;">${shopType}</p>
             <h3 style="margin:0 0 8px 0;font-size:15px;border-bottom:2px solid ${borderColor};padding-bottom:4px;color:#333;">${shop.name}</h3>
-            <p style="margin:4px 0;font-size:12px;color:#333;"><b>🍜 ジャンル:</b> ${renderGenre(shop.genre)}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;word-wrap:break-word;"><b>📍 住所:</b> ${shop.address}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;background:#f8f9fa;padding:4px 6px;border-radius:3px;"><b>🚗 駐車場:</b> ${renderParking(shop.parking)}</p>
             <div style="margin-top:10px;display:flex;gap:6px;">
                 <a href="${gmapsUrl}" target="_blank"
                    style="flex:1;text-align:center;padding:7px 4px;background:#34A853;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;">
-                   🗺️ Google Mapで経路
+                   🗺️ Google Mapで経路を検索
                 </a>
                 <a href="${searchUrl}" target="_blank"
                    style="flex:1;text-align:center;padding:7px 4px;background:#4285F4;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;">
@@ -200,8 +200,6 @@ document.getElementById('stationSidebarOverlay').addEventListener('click', close
 // 現在地 & 最寄り店ロジック
 // ===================================================================
 
-/** ダミー現在地：ローカルや Geolocation 失敗時に使用（柏駅） */
-const FALLBACK_POS = { lat: 35.8624, lng: 139.9773 };
 const MAP_BOUNDS   = [[35.60, 139.70], [36.08, 140.25]];
 
 let userPos             = null;   // { lat, lng }
@@ -280,8 +278,7 @@ function updateNearestPanel(mode) {
     const resultDiv = document.getElementById('nearestResult');
     if (!resultDiv || !userPos) return;
 
-    let result, modeNote, isDummy;
-    isDummy = userPos._isDummy;
+    let result, modeNote;
 
     if (mode === 'train') {
         result   = findNearestByTrain(userPos.lat, userPos.lng);
@@ -311,21 +308,19 @@ function updateNearestPanel(mode) {
     resultDiv.innerHTML = `
         <div class="nearest-dist-row">📏 <strong>${dist} km</strong> ／ ${modeNote}</div>
         <div class="nearest-name">${typeEmoji} ${shop.name}</div>
-        ${shop.genre ? `<div class="nearest-genre-row">${renderGenre(shop.genre)}</div>` : ''}
         <div class="nearest-addr">📍 ${shop.address}</div>
         <div class="nearest-hrs">🕒 ${renderHours(shop.hours)}</div>
         <div class="nearest-actions">
             <button class="nbtn nbtn-map" onclick="focusNearestShop()">🗺️ 地図で見る</button>
             <a class="nbtn nbtn-search" href="${searchUrl}" target="_blank">🔍 検索</a>
         </div>
-        ${isDummy ? '<p class="nearest-pos-note">📍 柏駅を仮の現在地として使用</p>' : ''}
     `;
 
     highlightShopOnMap(shop);
 }
 
 // ---- ユーザーマーカーを地図に表示 ----
-function showUserMarker(lat, lng, isDummy, accuracy) {
+function showUserMarker(lat, lng, accuracy) {
     if (locationMarker) { map.removeLayer(locationMarker); locationMarker = null; }
     if (locationCircle) { map.removeLayer(locationCircle); locationCircle = null; }
 
@@ -333,9 +328,9 @@ function showUserMarker(lat, lng, isDummy, accuracy) {
         radius: 9, color: '#fff', weight: 2.5, fillColor: '#2979FF', fillOpacity: 1
     })
     .addTo(map)
-    .bindPopup(isDummy ? '📍 現在地（ダミー：柏駅）' : '📍 現在地');
+    .bindPopup('📍 現在地');
 
-    if (!isDummy && accuracy) {
+    if (accuracy) {
         locationCircle = L.circle([lat, lng], {
             radius: accuracy, color: '#2979FF', fillColor: '#2979FF',
             fillOpacity: 0.12, weight: 1
@@ -344,13 +339,13 @@ function showUserMarker(lat, lng, isDummy, accuracy) {
 }
 
 // ---- 現在地を初期化（成功・フォールバック共通エントリポイント） ----
-function initUserPosition(lat, lng, isDummy, accuracy) {
-    userPos         = { lat, lng, _isDummy: isDummy };
-    showUserMarker(lat, lng, isDummy, accuracy);
+function initUserPosition(lat, lng, accuracy) {
+    userPos         = { lat, lng };
+    showUserMarker(lat, lng, accuracy);
 
     // マップをユーザー位置に移動（maxBounds を一時解除して飛ぶ）
     map.setMaxBounds(null);
-    map.flyTo([lat, lng], isDummy ? 13 : 15, { duration: 1.5 });
+    map.flyTo([lat, lng], 15, { duration: 1.5 });
     map.once('moveend', function() {
         if (L.latLngBounds(MAP_BOUNDS).contains([lat, lng])) {
             map.setMaxBounds(MAP_BOUNDS);
@@ -517,32 +512,16 @@ document.querySelectorAll('.nearest-tab').forEach(tab => {
 
 // ===================================================================
 // ページ読み込み時の自動位置情報取得
-//   - HTTPS 環境（GitHub Pages 等）: Geolocation API を試みる
-//   - file:// 環境やブロック時: 柏駅をダミー現在地として使用
 // ===================================================================
 (function initGeolocation() {
-    // ローカルファイルまたは API 非対応の場合は即フォールバック
-    if (window.location.protocol === 'file:' || !navigator.geolocation) {
-        console.warn(
-            '[ラーメンマップ] Geolocation 非対応またはローカルファイル環境です。' +
-            '柏駅（35.8624, 139.9773）をダミー現在地として使用します。'
-        );
-        setTimeout(() => initUserPosition(FALLBACK_POS.lat, FALLBACK_POS.lng, true, null), 400);
-        return;
-    }
+    if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
         function(pos) {
-            console.info('[ラーメンマップ] 現在地を取得しました。');
-            initUserPosition(pos.coords.latitude, pos.coords.longitude, false, pos.coords.accuracy);
+            initUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
         },
         function(err) {
-            console.warn(
-                '[ラーメンマップ] 位置情報の取得に失敗しました（' + err.message + '）。' +
-                '柏駅をダミー現在地として使用します。'
-            );
-            alert('位置情報の取得に失敗しました: ' + err.message);
-            initUserPosition(FALLBACK_POS.lat, FALLBACK_POS.lng, true, null);
+            console.warn('[ラーメンマップ] 位置情報の取得に失敗しました（' + err.message + '）。');
         },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
     );
