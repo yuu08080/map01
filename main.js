@@ -245,13 +245,13 @@ function buildPopupContent(shop) {
             <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
             ${statusHtml}
             <p style="margin:4px 0;font-size:12px;color:#333;background:#f8f9fa;padding:4px 6px;border-radius:3px;"><b>🚗 駐車場:</b> ${renderParking(shop.parking)}</p>
-            <div style="margin-top:10px;display:flex;gap:6px;">
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;align-items:center;">
                 <a href="${gmapsUrl}" target="_blank"
-                   style="flex:1;text-align:center;padding:7px 4px;background:#34A853;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;">
+                   style="width:100%;text-align:center;padding:7px 4px;background:#34A853;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;box-sizing:border-box;">
                    🗺️ Google Mapで経路を検索
                 </a>
                 <a href="${searchUrl}" target="_blank"
-                   style="flex:1;text-align:center;padding:7px 4px;background:#4285F4;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;">
+                   style="width:100%;text-align:center;padding:7px 4px;background:#4285F4;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;box-sizing:border-box;">
                    🔍 詳細を検索
                 </a>
             </div>
