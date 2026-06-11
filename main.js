@@ -80,6 +80,139 @@ function renderParking(parking) {
     return `<span style="color:#27ae60;">✅ ${parking}</span>`;
 }
 
+// ===================================================================
+// 営業時間パーサー（今日の曜日・現在時刻に基づく営業状況）
+// ===================================================================
+const _JP_DAY       = { '月':1,'火':2,'水':3,'木':4,'金':5,'土':6,'日':0 };
+const _JP_DAY_NAMES = ['日','月','火','水','木','金','土'];
+
+function _expandDayRange(from, to) {
+    const order = [1,2,3,4,5,6,0]; // 月→日
+    const fi = order.indexOf(_JP_DAY[from] ?? -1);
+    const ti = order.indexOf(_JP_DAY[to]   ?? -1);
+    if (fi < 0 || ti < 0) return [];
+    const days = [];
+    if (fi <= ti) { for (let i=fi; i<=ti; i++) days.push(order[i]); }
+    else          { for (let i=fi; i<7;  i++) days.push(order[i]); for (let i=0; i<=ti; i++) days.push(order[i]); }
+    return days;
+}
+
+function _parseDaySpec(spec, today) {
+    spec = spec.replace(/[祝前]/g,'').trim();
+    if (!spec) return false;
+    if (spec === '平日') return today >= 1 && today <= 5;
+    if (spec === '土日') return today === 0 || today === 6;
+    if (spec === '毎日' || spec === '無休') return true;
+    if (spec === '日祝') return today === 0;
+    if (spec === '土日祝') return today === 0 || today === 6;
+    const daySet = [];
+    for (let i = 0; i < spec.length; i++) {
+        const ch = spec[i];
+        if (!(ch in _JP_DAY)) continue;
+        if (spec[i+1] === '-' && spec[i+2] in _JP_DAY) {
+            daySet.push(..._expandDayRange(ch, spec[i+2]));
+            i += 2;
+        } else {
+            daySet.push(_JP_DAY[ch]);
+        }
+    }
+    return daySet.includes(today);
+}
+
+function _toMin(t) {
+    const next  = t.startsWith('翌');
+    const parts = t.replace('翌','').replace('頃','').split(':');
+    if (parts.length < 2) return null;
+    const h = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+    return (isNaN(h) || isNaN(m)) ? null : (next ? 24 : 0)*60 + h*60 + m;
+}
+
+function _fmtMin(min) {
+    const h = Math.floor(min/60), m = min % 60;
+    const pad = v => String(v).padStart(2,'0');
+    return h >= 24 ? `翌${h-24}:${pad(m)}` : `${h}:${pad(m)}`;
+}
+
+function _parseTimePeriods(str) {
+    const periods = [];
+    for (const part of str.split(/[\/、]/).map(s => s.trim())) {
+        const m = part.match(/(翌?\d{1,2}:\d{2})\s*[-〜～]\s*(翌?\d{1,2}:\d{2})/);
+        if (!m) continue;
+        const s = _toMin(m[1]), e = _toMin(m[2]);
+        if (s !== null && e !== null) periods.push({ start: s, end: e });
+    }
+    return periods;
+}
+
+function getShopStatus(hoursStr) {
+    if (!hoursStr) return null;
+    if (/店舗情報参照|施設に準ずる|不明/.test(hoursStr)) return null;
+
+    const now     = new Date();
+    const today   = now.getDay();
+    const nowMin  = now.getHours() * 60 + now.getMinutes();
+    const todayName = _JP_DAY_NAMES[today];
+
+    if (/24時間/.test(hoursStr)) {
+        return { isOpen: true, todayHoursStr: '24時間営業', statusText: '🟢 営業中（24時間）' };
+    }
+
+    // 定休日チェック（第N曜日・不定 は「確定休み」とみなさない）
+    const closedM = hoursStr.match(/定休[日:：]?\s*([月火水木金土日・第\d不定夜\s]{1,20})/);
+    if (closedM) {
+        const closedParts = closedM[1].split(/[・、,，\s]+/).filter(Boolean);
+        for (const part of closedParts) {
+            if (/^第\d/.test(part)) continue;   // 第1火、第3月 など → スキップ
+            if (/不定/.test(part))  continue;   // 木不定 など → スキップ
+            for (const ch of [...part]) {
+                if ((_JP_DAY[ch] ?? -1) === today) {
+                    return { isOpen: false, todayHoursStr: null, statusText: `🔴 本日（${todayName}）定休日` };
+                }
+            }
+        }
+    }
+
+    // セグメント解析（括弧内の注記を除去してから分割）
+    const cleaned  = hoursStr.replace(/（[^）]{0,40}）/g,' ').replace(/\([^)]{0,40}\)/g,' ');
+    const segments = cleaned.replace(/<br\s*\/?>/gi,' / ').split(/\s*\/\s*/).map(s=>s.trim()).filter(Boolean);
+
+    const todayPeriods = [];
+    let hasDayPrefix   = false;
+
+    for (const seg of segments) {
+        const dpM = seg.match(/^([月火水木金土日平毎祝・\-]+)\s+(.+)/);
+        if (dpM) {
+            hasDayPrefix = true;
+            if (_parseDaySpec(dpM[1], today)) {
+                todayPeriods.push(..._parseTimePeriods(dpM[2]));
+            }
+        } else if (!hasDayPrefix) {
+            todayPeriods.push(..._parseTimePeriods(seg));
+        }
+    }
+
+    if (todayPeriods.length === 0) {
+        if (hasDayPrefix) return { isOpen: false, todayHoursStr: null, statusText: `🔴 本日（${todayName}）は休業日` };
+        return null;
+    }
+
+    const todayHoursStr = todayPeriods.map(p => `${_fmtMin(p.start)}〜${_fmtMin(p.end)}`).join('・');
+    const isOpen        = todayPeriods.some(p => nowMin >= p.start && nowMin < p.end);
+
+    let statusText;
+    if (isOpen) {
+        const cur  = todayPeriods.find(p => nowMin >= p.start && nowMin < p.end);
+        statusText = `🟢 営業中（〜${_fmtMin(cur.end)}）`;
+    } else {
+        const next = todayPeriods.find(p => p.start > nowMin);
+        statusText = next
+            ? `🔴 準備中・休憩中（${_fmtMin(next.start)}〜）`
+            : `🔴 本日の営業終了`;
+    }
+
+    return { isOpen, todayHoursStr, statusText };
+}
+
 // ポップアップ HTML を組み立てる（マーカーとハイライト両用）
 function buildPopupContent(shop) {
     if (!shop || typeof chainKeywords === 'undefined') return '';
@@ -89,12 +222,28 @@ function buildPopupContent(shop) {
     const shopTypeColor = isChain ? '#2980b9' : '#c0392b';
     const searchUrl  = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
     const gmapsUrl   = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
+
+    const status    = getShopStatus(shop.hours);
+    const todayName = _JP_DAY_NAMES[new Date().getDay()];
+
+    let statusHtml = '';
+    if (status) {
+        const bg = status.isOpen ? '#eafaf1' : '#fdecea';
+        const bc = status.isOpen ? '#27ae60' : '#e74c3c';
+        statusHtml = `
+            <div style="margin:5px 0;padding:5px 9px;background:${bg};border-left:3px solid ${bc};border-radius:3px;line-height:1.6;">
+                <span style="font-size:12px;font-weight:bold;">${status.statusText}</span>
+                ${status.todayHoursStr ? `<br><span style="font-size:11px;color:#555;">本日(${todayName})の営業: ${status.todayHoursStr}</span>` : ''}
+            </div>`;
+    }
+
     return `
         <div style="font-family:sans-serif;min-width:240px;max-width:300px;">
             <p style="margin:0 0 4px 0;font-size:11px;color:${shopTypeColor};font-weight:bold;">${shopType}</p>
             <h3 style="margin:0 0 8px 0;font-size:15px;border-bottom:2px solid ${borderColor};padding-bottom:4px;color:#333;">${shop.name}</h3>
             <p style="margin:4px 0;font-size:12px;color:#333;word-wrap:break-word;"><b>📍 住所:</b> ${shop.address}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
+            ${statusHtml}
             <p style="margin:4px 0;font-size:12px;color:#333;background:#f8f9fa;padding:4px 6px;border-radius:3px;"><b>🚗 駐車場:</b> ${renderParking(shop.parking)}</p>
             <div style="margin-top:10px;display:flex;gap:6px;">
                 <a href="${gmapsUrl}" target="_blank"
@@ -305,11 +454,17 @@ function updateNearestPanel(mode) {
 
     window._nearestShop = shop;
 
+    const nearStatus = getShopStatus(shop.hours);
+    const statusBadge = nearStatus
+        ? `<div class="nearest-status ${nearStatus.isOpen ? 'open' : 'closed'}">${nearStatus.statusText}</div>`
+        : '';
+
     resultDiv.innerHTML = `
         <div class="nearest-dist-row">📏 <strong>${dist} km</strong> ／ ${modeNote}</div>
         <div class="nearest-name">${typeEmoji} ${shop.name}</div>
         <div class="nearest-addr">📍 ${shop.address}</div>
         <div class="nearest-hrs">🕒 ${renderHours(shop.hours)}</div>
+        ${statusBadge}
         <div class="nearest-actions">
             <button class="nbtn nbtn-map" onclick="focusNearestShop()">🗺️ 地図で見る</button>
             <a class="nbtn nbtn-search" href="${searchUrl}" target="_blank">🔍 検索</a>
