@@ -648,7 +648,7 @@ document.querySelectorAll('.nearest-tab').forEach(tab => {
             function(pos) {
                 btn.disabled = false;
                 btn.style.opacity = '1';
-                initUserPosition(pos.coords.latitude, pos.coords.longitude, false, pos.coords.accuracy);
+                initUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
             },
             function(err) {
                 btn.disabled = false;
