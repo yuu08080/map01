@@ -259,14 +259,14 @@ async function fetchRouteCoords(waypoints) {
 }
 
 const roadDefs = [
-    { src: typeof route6Coords   !== 'undefined' ? route6Coords   : [], color: '#3498db', popup: '<b>🛣️ 国道6号線</b>' },
-    { src: typeof route16Coords  !== 'undefined' ? route16Coords  : [], color: '#e67e22', popup: '<b>🛣️ 国道16号線</b>' },
-    { src: typeof route5Coords   !== 'undefined' ? route5Coords   : [], color: '#9b59b6', popup: '<b>🛣️ 流山街道 (県道5号)</b>' },
-    { src: typeof route464Coords !== 'undefined' ? route464Coords : [], color: '#e84393', popup: '<b>🛣️ 国道464号線</b>' },
-    { src: typeof route294Coords !== 'undefined' ? route294Coords : [], color: '#27ae60', popup: '<b>🛣️ 国道294号線</b>' },
+    { id: 'road6',   src: typeof route6Coords   !== 'undefined' ? route6Coords   : [], color: '#3498db', label: '国道6号',  popup: '<b>🛣️ 国道6号線</b>' },
+    { id: 'road16',  src: typeof route16Coords  !== 'undefined' ? route16Coords  : [], color: '#e67e22', label: '国道16号', popup: '<b>🛣️ 国道16号線</b>' },
+    { id: 'road5',   src: typeof route5Coords   !== 'undefined' ? route5Coords   : [], color: '#9b59b6', label: '流山街道', popup: '<b>🛣️ 流山街道 (県道5号)</b>' },
+    { id: 'road464', src: typeof route464Coords !== 'undefined' ? route464Coords : [], color: '#e84393', label: '国道464号', popup: '<b>🛣️ 国道464号線</b>' },
+    { id: 'road294', src: typeof route294Coords !== 'undefined' ? route294Coords : [], color: '#27ae60', label: '国道294号', popup: '<b>🛣️ 国道294号線</b>' },
 ];
 
-const roadsLayerGroup = L.layerGroup().addTo(map);
+roadDefs.forEach(road => { road.layer = L.layerGroup().addTo(map); });
 
 (async () => {
     for (const road of roadDefs) {
@@ -274,10 +274,10 @@ const roadsLayerGroup = L.layerGroup().addTo(map);
         const style = { color: road.color, weight: 5, opacity: 0.75 };
         try {
             const coords = await fetchRouteCoords(road.src);
-            L.polyline(coords, style).bindPopup(road.popup).addTo(roadsLayerGroup);
+            L.polyline(coords, style).bindPopup(road.popup).addTo(road.layer);
         } catch (e) {
             console.warn('OSRMルート取得失敗（直線で代替）:', road.popup, e.message);
-            L.polyline(road.src, style).bindPopup(road.popup).addTo(roadsLayerGroup);
+            L.polyline(road.src, style).bindPopup(road.popup).addTo(road.layer);
         }
         await new Promise(r => setTimeout(r, 250));
     }
@@ -440,6 +440,14 @@ const FilterControl = L.Control.extend({
         const container = L.DomUtil.create('div', 'filter-panel');
         L.DomEvent.disableClickPropagation(container);
         L.DomEvent.disableScrollPropagation(container);
+        const roadSubHtml = roadDefs.map(road => `
+            <label class="filter-item filter-sub-item">
+                <input type="checkbox" id="${road.id}Filter" checked>
+                <div class="filter-road-line-icon" style="background:${road.color};"></div>
+                <span>${road.label}</span>
+            </label>
+        `).join('');
+
         container.innerHTML = `
             <div class="filter-title">表示切り替え</div>
             <label class="filter-item">
@@ -454,11 +462,18 @@ const FilterControl = L.Control.extend({
                 <img class="filter-pin" src="${_GREY_PIN_URL}">
                 <span>駅</span>
             </label>
-            <label class="filter-item">
-                <input type="checkbox" id="roadsFilter" checked>
-                <div class="filter-road-line-icon"></div>
-                <span>国道・街道</span>
-            </label>
+            <div class="filter-divider"></div>
+            <div class="filter-roads-header">
+                <label class="filter-item" style="margin:0;flex:1;">
+                    <input type="checkbox" id="roadsFilter" checked>
+                    <div class="filter-road-line-icon"></div>
+                    <span>国道・街道</span>
+                </label>
+                <button class="filter-roads-toggle" id="roadsToggle" title="個別切替">▼</button>
+            </div>
+            <div class="filter-roads-sub" id="roadsSub">
+                ${roadSubHtml}
+            </div>
         `;
 
         container.querySelector('#ramenFilter').addEventListener('change', function() {
@@ -467,8 +482,30 @@ const FilterControl = L.Control.extend({
         container.querySelector('#stationFilter').addEventListener('change', function() {
             this.checked ? stationsLayerGroup.addTo(map) : map.removeLayer(stationsLayerGroup);
         });
-        container.querySelector('#roadsFilter').addEventListener('change', function() {
-            this.checked ? roadsLayerGroup.addTo(map) : map.removeLayer(roadsLayerGroup);
+
+        const masterCb = container.querySelector('#roadsFilter');
+        masterCb.addEventListener('change', function() {
+            roadDefs.forEach(road => {
+                const cb = container.querySelector(`#${road.id}Filter`);
+                cb.checked = this.checked;
+                this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
+            });
+        });
+
+        roadDefs.forEach(road => {
+            container.querySelector(`#${road.id}Filter`).addEventListener('change', function() {
+                this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
+                const checkedCount = roadDefs.filter(r => container.querySelector(`#${r.id}Filter`).checked).length;
+                masterCb.indeterminate = checkedCount > 0 && checkedCount < roadDefs.length;
+                masterCb.checked = checkedCount === roadDefs.length;
+            });
+        });
+
+        const toggleBtn = container.querySelector('#roadsToggle');
+        const subPanel  = container.querySelector('#roadsSub');
+        toggleBtn.addEventListener('click', function() {
+            const isOpen = subPanel.classList.toggle('open');
+            toggleBtn.textContent = isOpen ? '▲' : '▼';
         });
 
         return container;
