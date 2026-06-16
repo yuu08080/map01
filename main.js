@@ -298,11 +298,27 @@ if (typeof stations !== 'undefined') {
     });
 }
 
-// 駅一覧サイドバーのリストを動的に生成
+// 駅一覧サイドバーのリストを動的に生成（周辺ラーメン店数の多い順）
 (function buildStationList() {
     const body = document.getElementById('stationListBody');
     if (!body || typeof stations === 'undefined') return;
-    stations.forEach(st => {
+
+    function distKm(lat1, lon1, lat2, lon2) {
+        const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    const RADIUS_KM = 1.5;
+    const shops = typeof ramenShops !== 'undefined' ? ramenShops : [];
+
+    const sorted = [...stations].sort((a, b) => {
+        const countA = shops.filter(s => distKm(a.lat, a.lon, s.lat, s.lon) <= RADIUS_KM).length;
+        const countB = shops.filter(s => distKm(b.lat, b.lon, s.lat, s.lon) <= RADIUS_KM).length;
+        return countB - countA;
+    });
+
+    sorted.forEach(st => {
         const item = document.createElement('div');
         item.className = 'station-list-item';
         item.textContent = `🚉 ${st.name}駅`;

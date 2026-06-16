@@ -158,11 +158,15 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     color: #333;
     transition: background 0.12s, color 0.12s;
     line-height: 1.4;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .station-list-item:hover  { background: #e8f4fd; color: #1a6dad; }
 .station-list-item:active { background: #cce5f7; }
 .station-list-item:last-child { border-bottom: none; }
+
 
 /* サイドバー背景オーバーレイ */
 .station-sidebar-overlay {
