@@ -470,7 +470,7 @@ new FilterControl().addTo(map);
     tab.addEventListener('click', function() {
         const isOpen = body.classList.contains('open');
         body.classList.toggle('open');
-        tab.textContent = isOpen ? '凡例 ▼' : '凡例 ▲';
+        tab.textContent = isOpen ? '凡例 ▲' : '凡例 ▼';
     });
 })();
 
