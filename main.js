@@ -23,15 +23,14 @@ L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&hl=ja&x={x}&y={y}&z={z}', {
 // アイコン定義
 // ===================================================================
 
-// ラーメン店用（赤・青ピン）
+// ラーメン店用（赤ピン）
 const createIcon = (color) => new L.Icon({
     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
     shadowSize: [41, 41], shadowAnchor: [12, 41]
 });
-const redIcon  = createIcon('red');
-const blueIcon = createIcon('blue');
+const redIcon = createIcon('red');
 
 // 駅用（グレーピン：ラーメン店と完全に同形・同サイズ、外部URL不要のSVG）
 const _GREY_PIN_URL = 'data:image/svg+xml;base64,' + btoa(
@@ -46,15 +45,6 @@ const stationIcon = new L.Icon({
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
     shadowSize: [41, 41], shadowAnchor: [12, 41]
-});
-
-// 最寄り店ハイライト用（脈動アニメーション付き）
-const highlightIcon = L.divIcon({
-    html: '<div class="highlight-pulse">🍜</div>',
-    className: '',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-    popupAnchor: [0, -22]
 });
 
 // ===================================================================
@@ -213,15 +203,11 @@ function getShopStatus(hoursStr) {
     return { isOpen, todayHoursStr, statusText };
 }
 
-// ポップアップ HTML を組み立てる（マーカーとハイライト両用）
+// ポップアップ HTML を組み立てる
 function buildPopupContent(shop) {
-    if (!shop || typeof chainKeywords === 'undefined') return '';
-    const isChain       = chainKeywords.some(kw => shop.name.includes(kw));
-    const borderColor   = isChain ? '#3498db' : '#e74c3c';
-    const shopType      = isChain ? '🏢 大手チェーン店' : '🍜 個人店・独立系';
-    const shopTypeColor = isChain ? '#2980b9' : '#c0392b';
-    const searchUrl  = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
-    const gmapsUrl   = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
+    if (!shop) return '';
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
+    const gmapsUrl  = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
 
     const status    = getShopStatus(shop.hours);
     const todayName = _JP_DAY_NAMES[new Date().getDay()];
@@ -239,8 +225,7 @@ function buildPopupContent(shop) {
 
     return `
         <div style="font-family:sans-serif;min-width:240px;max-width:300px;">
-            <p style="margin:0 0 4px 0;font-size:11px;color:${shopTypeColor};font-weight:bold;">${shopType}</p>
-            <h3 style="margin:0 0 8px 0;font-size:15px;border-bottom:2px solid ${borderColor};padding-bottom:4px;color:#333;">${shop.name}</h3>
+            <h3 style="margin:0 0 8px 0;font-size:15px;border-bottom:2px solid #e74c3c;padding-bottom:4px;color:#333;">${shop.name}</h3>
             <p style="margin:4px 0;font-size:12px;color:#333;word-wrap:break-word;"><b>📍 住所:</b> ${shop.address}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
             ${statusHtml}
@@ -346,133 +331,14 @@ document.getElementById('stationSidebarClose').addEventListener('click', closeSi
 document.getElementById('stationSidebarOverlay').addEventListener('click', closeSidebar);
 
 // ===================================================================
-// 現在地 & 最寄り店ロジック
+// 現在地ロジック
 // ===================================================================
 
-const MAP_BOUNDS   = [[35.60, 139.70], [36.08, 140.25]];
+const MAP_BOUNDS = [[35.60, 139.70], [36.08, 140.25]];
 
-let userPos             = null;   // { lat, lng }
-let currentMode         = 'car';  // タブ選択状態
-let locationMarker      = null;
-let locationCircle      = null;
-let highlightMarker     = null;
-
-// ---- Haversine 距離（km） ----
-function haversineKm(lat1, lng1, lat2, lng2) {
-    const R    = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a    = Math.sin(dLat / 2) ** 2
-               + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
-               * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// ---- 直線距離で最寄り店（車・徒歩共用） ----
-// 将来的に Google Maps Directions API に差し替えやすい構造にしてある
-function findNearestDirect(fromLat, fromLng) {
-    if (typeof ramenShops === 'undefined') return null;
-    let nearest = null, minDist = Infinity;
-    ramenShops.forEach(shop => {
-        const d = haversineKm(fromLat, fromLng, shop.lat, shop.lon);
-        if (d < minDist) { minDist = d; nearest = shop; }
-    });
-    return nearest ? { shop: nearest, distance: minDist } : null;
-}
-
-// ---- 最寄り駅経由で最寄り店（電車モード） ----
-// 将来的に乗換案内 API に差し替えやすい構造にしてある
-function findNearestByTrain(fromLat, fromLng) {
-    if (typeof stations === 'undefined' || typeof ramenShops === 'undefined') return null;
-
-    // Step1: 現在地から最寄り駅を探す
-    let nearestSt = null, minStDist = Infinity;
-    stations.forEach(st => {
-        const d = haversineKm(fromLat, fromLng, st.lat, st.lon);
-        if (d < minStDist) { minStDist = d; nearestSt = st; }
-    });
-    if (!nearestSt) return null;
-
-    // Step2: その駅から最寄りのラーメン店を探す
-    let nearest = null, minDist = Infinity;
-    ramenShops.forEach(shop => {
-        const d = haversineKm(nearestSt.lat, nearestSt.lon, shop.lat, shop.lon);
-        if (d < minDist) { minDist = d; nearest = shop; }
-    });
-
-    return nearest
-        ? { shop: nearest, distance: minDist, via: nearestSt.name, stationDist: minStDist }
-        : null;
-}
-
-// ---- 最寄り店ハイライトマーカーを更新 ----
-function highlightShopOnMap(shop) {
-    if (highlightMarker) { map.removeLayer(highlightMarker); highlightMarker = null; }
-    if (!shop) return;
-    highlightMarker = L.marker([shop.lat, shop.lon], { icon: highlightIcon, zIndexOffset: 2000 })
-        .bindPopup(buildPopupContent(shop))
-        .addTo(map);
-}
-
-// ---- 「地図で見る」ボタン用グローバル関数 ----
-window.focusNearestShop = function() {
-    const shop = window._nearestShop;
-    if (!shop) return;
-    map.flyTo([shop.lat, shop.lon], 16, { duration: 1.0 });
-    if (highlightMarker) setTimeout(() => highlightMarker.openPopup(), 1100);
-};
-
-// ---- 最寄りパネルの表示を更新 ----
-function updateNearestPanel(mode) {
-    const resultDiv = document.getElementById('nearestResult');
-    if (!resultDiv || !userPos) return;
-
-    let result, modeNote;
-
-    if (mode === 'train') {
-        result   = findNearestByTrain(userPos.lat, userPos.lng);
-        modeNote = result && result.via
-            ? `最寄り駅 <strong>${result.via}駅</strong> 周辺`
-            : '電車利用の最短距離';
-    } else {
-        result   = findNearestDirect(userPos.lat, userPos.lng);
-        modeNote = mode === 'walk'
-            ? '徒歩（直線距離）'
-            : '車（直線距離）';
-    }
-
-    if (!result || !result.shop) {
-        resultDiv.innerHTML = '<p class="nearest-empty">店舗が見つかりませんでした</p>';
-        return;
-    }
-
-    const shop      = result.shop;
-    const dist      = result.distance.toFixed(1);
-    const isChain   = typeof chainKeywords !== 'undefined' && chainKeywords.some(kw => shop.name.includes(kw));
-    const typeEmoji = isChain ? '🏢' : '🍜';
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
-
-    window._nearestShop = shop;
-
-    const nearStatus = getShopStatus(shop.hours);
-    const statusBadge = nearStatus
-        ? `<div class="nearest-status ${nearStatus.isOpen ? 'open' : 'closed'}">${nearStatus.statusText}</div>`
-        : '';
-
-    resultDiv.innerHTML = `
-        <div class="nearest-dist-row">📏 <strong>${dist} km</strong> ／ ${modeNote}</div>
-        <div class="nearest-name">${typeEmoji} ${shop.name}</div>
-        <div class="nearest-addr">📍 ${shop.address}</div>
-        <div class="nearest-hrs">🕒 ${renderHours(shop.hours)}</div>
-        ${statusBadge}
-        <div class="nearest-actions">
-            <button class="nbtn nbtn-map" onclick="focusNearestShop()">🗺️ 地図で見る</button>
-            <a class="nbtn nbtn-search" href="${searchUrl}" target="_blank">🔍 検索</a>
-        </div>
-    `;
-
-    highlightShopOnMap(shop);
-}
+let userPos        = null;
+let locationMarker = null;
+let locationCircle = null;
 
 // ---- ユーザーマーカーを地図に表示 ----
 function showUserMarker(lat, lng, accuracy) {
@@ -506,9 +372,6 @@ function initUserPosition(lat, lng, accuracy) {
             map.setMaxBounds(MAP_BOUNDS);
         }
     });
-
-    // 最寄り店パネルを更新
-    updateNearestPanel(currentMode);
 }
 
 // ===================================================================
@@ -534,13 +397,11 @@ function makeClusterOptions() {
     };
 }
 
-const chainCluster      = L.markerClusterGroup(makeClusterOptions());
-const individualCluster = L.markerClusterGroup(makeClusterOptions());
+const ramenCluster = L.markerClusterGroup(makeClusterOptions());
 
-if (typeof ramenShops !== 'undefined' && typeof chainKeywords !== 'undefined') {
+if (typeof ramenShops !== 'undefined') {
     ramenShops.forEach(shop => {
-        const isChain = chainKeywords.some(kw => shop.name.includes(kw));
-        const marker  = L.marker([shop.lat, shop.lon], { icon: isChain ? blueIcon : redIcon })
+        const marker = L.marker([shop.lat, shop.lon], { icon: redIcon })
             .bindPopup(buildPopupContent(shop));
 
         // ピンクリック時：スムーズにズームイン（最低 zoom 16 まで拡大）
@@ -548,12 +409,10 @@ if (typeof ramenShops !== 'undefined' && typeof chainKeywords !== 'undefined') {
             map.flyTo([shop.lat, shop.lon], Math.max(map.getZoom(), 16), { duration: 0.7 });
         });
 
-        if (isChain) chainCluster.addLayer(marker);
-        else         individualCluster.addLayer(marker);
+        ramenCluster.addLayer(marker);
     });
 
-    chainCluster.addTo(map);
-    individualCluster.addTo(map);
+    ramenCluster.addTo(map);
 }
 
 // ===================================================================
@@ -568,16 +427,10 @@ const FilterControl = L.Control.extend({
         container.innerHTML = `
             <div class="filter-title">表示切り替え</div>
             <label class="filter-item">
-                <input type="checkbox" id="chainFilter" checked>
-                <img class="filter-pin"
-                     src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png">
-                <span>チェーン店</span>
-            </label>
-            <label class="filter-item">
-                <input type="checkbox" id="individualFilter" checked>
+                <input type="checkbox" id="ramenFilter" checked>
                 <img class="filter-pin"
                      src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
-                <span>個人店</span>
+                <span>ラーメン店</span>
             </label>
             <div class="filter-divider"></div>
             <label class="filter-item">
@@ -592,11 +445,8 @@ const FilterControl = L.Control.extend({
             </label>
         `;
 
-        container.querySelector('#chainFilter').addEventListener('change', function() {
-            this.checked ? chainCluster.addTo(map) : map.removeLayer(chainCluster);
-        });
-        container.querySelector('#individualFilter').addEventListener('change', function() {
-            this.checked ? individualCluster.addTo(map) : map.removeLayer(individualCluster);
+        container.querySelector('#ramenFilter').addEventListener('change', function() {
+            this.checked ? ramenCluster.addTo(map) : map.removeLayer(ramenCluster);
         });
         container.querySelector('#stationFilter').addEventListener('change', function() {
             this.checked ? stationsLayerGroup.addTo(map) : map.removeLayer(stationsLayerGroup);
@@ -611,16 +461,18 @@ const FilterControl = L.Control.extend({
 new FilterControl().addTo(map);
 
 // ===================================================================
-// 最寄りパネルのタブ切り替え
+// 凡例トグル
 // ===================================================================
-document.querySelectorAll('.nearest-tab').forEach(tab => {
+(function() {
+    const tab  = document.getElementById('legendTab');
+    const body = document.getElementById('legendBody');
+    if (!tab || !body) return;
     tab.addEventListener('click', function() {
-        document.querySelectorAll('.nearest-tab').forEach(t => t.classList.remove('active'));
-        this.classList.add('active');
-        currentMode = this.dataset.mode;
-        updateNearestPanel(currentMode);
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open');
+        tab.textContent = isOpen ? '凡例 ▼' : '凡例 ▲';
     });
-});
+})();
 
 // ===================================================================
 // 現在地ボタン（手動で再取得）
