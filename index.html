@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>東葛エリア ラーメン空間分析マップ</title>
+    <title>東葛エリア 個人店 vs チェーン店 立地・生存戦略マップ</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,6 +15,53 @@
 </head>
 <body>
     <div id="map"></div>
+
+    <!-- About ボタン（右上） -->
+    <button id="about-btn" class="about-btn" title="このマップについて">About</button>
+
+    <!-- About モーダル -->
+    <div class="modal-overlay" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-container" id="aboutModalContainer">
+            <button class="modal-close-btn" id="modalCloseBtn" aria-label="閉じる">×</button>
+
+            <div class="modal-project-title" id="modalTitle">🍜 個人店 vs チェーン店 立地・生存戦略マップ</div>
+            <div class="modal-subtitle">東葛エリア（柏市・松戸市・流山市・我孫子市）の飲食店立地分析 WebGISアプリ</div>
+
+            <hr class="modal-divider">
+
+            <div class="modal-section-title">プロジェクト概要</div>
+            <p class="modal-description">
+                本マップは、東葛エリアにおける飲食店の立地戦略を可視化した空間分布マップです。主要駅を中心とした半径500mの『徒歩圏内』に密集する個人店と、モータリゼーション（車社会）を背景に幹線道路沿いに展開する大型チェーン店の生存戦略の違いを、地理的データから比較・分析することを目的としています。
+            </p>
+
+            <hr class="modal-divider">
+
+            <div class="modal-section-title">グループメンバー紹介</div>
+            <div class="member-cards">
+                <div class="member-card">
+                    <img class="member-photo" src="images/takumiya.jpg" alt="メンバー写真">
+                    <div class="member-name">三浦 和道</div>
+                    <div class="member-role">担当：デザイン</div>
+                    <span class="member-title">Data Hunter</span>
+                    <div class="member-bio">醤油ラーメンが大好きですが、実際あんまり行かないです。</div>
+                </div>
+                <div class="member-card">
+                    <img class="member-photo" src="https://via.placeholder.com/150" alt="メンバー写真">
+                    <div class="member-name">メンバー名</div>
+                    <div class="member-role">担当：</div>
+                    <span class="member-title">役職</span>
+                    <div class="member-bio">自己紹介文</div>
+                </div>
+                <div class="member-card">
+                    <img class="member-photo" src="https://via.placeholder.com/150" alt="メンバー写真">
+                    <div class="member-name">メンバー名</div>
+                    <div class="member-role">担当：</div>
+                    <span class="member-title">役職</span>
+                    <div class="member-bio">自己紹介文</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 現在地ボタン（手動再取得） -->
     <button id="locate-btn" class="locate-btn" title="現在地を再取得" aria-label="現在地を再取得">
@@ -46,7 +93,7 @@
 
     <!-- タイトルパネル（左上） -->
     <div class="info-panel">
-        <h2>柏市周辺のラーメン店マップ</h2>
+        <h2>個人店 vs チェーン店 立地・生存戦略マップ</h2>
         <p><span class="shop-count">対象: 柏市・松戸市・流山市・我孫子市</span></p>
         <p style="margin-top:8px; font-size:11px; color:#999;">ピンをクリックで詳細を表示</p>
         <p class="update-date">データ最終更新日：2026年5月</p>
@@ -55,6 +102,17 @@
     <!-- 凡例（右下・折りたたみ式） -->
     <div class="legend-wrapper" id="legendWrapper">
         <div class="legend-body" id="legendBody">
+            <!-- ラーメン店（表示切替は左下パネルで操作） -->
+            <div class="legend-item">
+                <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
+                <span style="font-size:12px; color:#333;">チェーン店</span>
+            </div>
+            <div class="legend-item">
+                <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png">
+                <span style="font-size:12px; color:#333;">個人店</span>
+            </div>
+            <div class="legend-divider-thin"></div>
+            <!-- 駅・500m圏 -->
             <div class="legend-item">
                 <svg class="legend-pin" viewBox="0 0 25 41" style="width:13px;height:21px;flex-shrink:0;">
                     <path fill="#808080" stroke="white" stroke-width="1.5"
@@ -64,9 +122,11 @@
                 <span style="font-size:12px; color:#333;">駅</span>
             </div>
             <div class="legend-item">
-                <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
-                <span style="font-size:12px; color:#333;">ラーメン店</span>
+                <div class="legend-circle-icon"></div>
+                <span style="font-size:12px; color:#333;">駅500m圏</span>
             </div>
+            <div class="legend-divider-thin"></div>
+            <!-- 道路 -->
             <div class="legend-item"><div class="legend-line" style="background:#3498db;"></div><span style="font-size:12px; color:#333;">国道6号</span></div>
             <div class="legend-item"><div class="legend-line" style="background:#e67e22;"></div><span style="font-size:12px; color:#333;">国道16号</span></div>
             <div class="legend-item"><div class="legend-line" style="background:#9b59b6;"></div><span style="font-size:12px; color:#333;">流山街道</span></div>

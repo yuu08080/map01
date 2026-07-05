@@ -11,19 +11,19 @@ const map = L.map('map', {
 
 L.control.zoom({ position: 'topright' }).addTo(map);
 
-// === タイルレイヤー（Google Maps 標準） ===
-L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&hl=ja&x={x}&y={y}&z={z}', {
-    attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
-    subdomains: ['0', '1', '2', '3'],
+// === タイルレイヤー（CartoDB Positron・淡色シンプルマップ） ===
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
     maxZoom: 21,
-    maxNativeZoom: 20
+    maxNativeZoom: 19
 }).addTo(map);
 
 // ===================================================================
 // アイコン定義
 // ===================================================================
 
-// ラーメン店用（赤ピン）
+// ラーメン店用（個人店：赤ピン / チェーン店：青ピン）
 const createIcon = (color) => new L.Icon({
     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
@@ -204,8 +204,12 @@ function getShopStatus(hoursStr) {
 }
 
 // ポップアップ HTML を組み立てる
-function buildPopupContent(shop) {
+function buildPopupContent(shop, isChain) {
     if (!shop) return '';
+    const accentColor = isChain ? '#e74c3c' : '#3498db';
+    const typeLabel   = isChain ? 'チェーン店' : '個人店';
+    const typeBg      = isChain ? '#fef0f0'   : '#ebf5fb';
+    const typeColor   = isChain ? '#c0392b'   : '#2471a3';
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
     const gmapsUrl  = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
 
@@ -225,7 +229,10 @@ function buildPopupContent(shop) {
 
     return `
         <div style="font-family:sans-serif;min-width:240px;max-width:300px;">
-            <h3 style="margin:0 0 8px 0;font-size:15px;border-bottom:2px solid #e74c3c;padding-bottom:4px;color:#333;">${shop.name}</h3>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;border-bottom:2px solid ${accentColor};padding-bottom:4px;">
+                <h3 style="margin:0;font-size:15px;color:#333;flex:1;margin-right:6px;line-height:1.3;">${shop.name}</h3>
+                <span style="flex-shrink:0;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:10px;background:${typeBg};color:${typeColor};border:1px solid ${accentColor}55;white-space:nowrap;align-self:center;">${typeLabel}</span>
+            </div>
             <p style="margin:4px 0;font-size:12px;color:#333;word-wrap:break-word;"><b>📍 住所:</b> ${shop.address}</p>
             <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
             ${statusHtml}
@@ -268,10 +275,28 @@ const roadDefs = [
 
 roadDefs.forEach(road => { road.layer = L.layerGroup().addTo(map); });
 
+// ===================================================================
+// 駅500m圏サークル（道路ラインより先に追加して視覚的に下に配置）
+// ===================================================================
+const stationCirclesLayer = L.layerGroup().addTo(map);
+if (typeof stations !== 'undefined') {
+    stations.forEach(st => {
+        L.circle([st.lat, st.lon], {
+            radius: 500,
+            color: '#27ae60',
+            fillColor: '#27ae60',
+            fillOpacity: 0.07,
+            weight: 1.5,
+            opacity: 0.35,
+            interactive: false
+        }).addTo(stationCirclesLayer);
+    });
+}
+
 (async () => {
     for (const road of roadDefs) {
         if (road.src.length < 2) continue;
-        const style = { color: road.color, weight: 5, opacity: 0.75 };
+        const style = { color: road.color, weight: 3, opacity: 0.55 };
         try {
             const coords = await fetchRouteCoords(road.src);
             L.polyline(coords, style).bindPopup(road.popup).addTo(road.layer);
@@ -391,127 +416,165 @@ function initUserPosition(lat, lng, accuracy) {
 }
 
 // ===================================================================
+// アイコン追加（個人店用：青）
+// ===================================================================
+const blueIcon = createIcon('blue');
+
+// ===================================================================
 // ラーメン店マーカー（クラスター + クリック時ズームイン）
 // ===================================================================
-function makeClusterOptions() {
+function makeClusterOptions(theme) {
+    const prefix = theme === 'chain' ? 'chain-' : '';
     return {
         maxClusterRadius: 80,
         disableClusteringAtZoom: 17,
         showCoverageOnHover: false,
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
-            let cls, size;
-            if (count < 5)       { cls = 'cluster-low';  size = 32; }
-            else if (count < 20) { cls = 'cluster-mid';  size = 40; }
-            else                 { cls = 'cluster-high'; size = 50; }
+            let suffix, size;
+            if (count < 5)       { suffix = 'low';  size = 32; }
+            else if (count < 20) { suffix = 'mid';  size = 40; }
+            else                 { suffix = 'high'; size = 50; }
             return L.divIcon({
                 html: `<div class="cluster-inner">${count}</div>`,
-                className: `marker-cluster-custom ${cls}`,
+                className: `marker-cluster-custom cluster-${prefix}${suffix}`,
                 iconSize: L.point(size, size)
             });
         }
     };
 }
 
-const ramenCluster = L.markerClusterGroup(makeClusterOptions());
+const chainCluster      = L.markerClusterGroup(makeClusterOptions('chain'));
+const individualCluster = L.markerClusterGroup(makeClusterOptions());
 
 if (typeof ramenShops !== 'undefined') {
     ramenShops.forEach(shop => {
-        const marker = L.marker([shop.lat, shop.lon], { icon: redIcon })
-            .bindPopup(buildPopupContent(shop));
+        const isChain = typeof chainKeywords !== 'undefined' &&
+                        chainKeywords.some(kw => shop.name.includes(kw));
+        const icon    = isChain ? redIcon : blueIcon;
+        const cluster = isChain ? chainCluster : individualCluster;
 
-        // ピンクリック時：スムーズにズームイン（最低 zoom 16 まで拡大）
+        const marker = L.marker([shop.lat, shop.lon], { icon })
+            .bindPopup(buildPopupContent(shop, isChain));
+
         marker.on('click', function() {
             map.flyTo([shop.lat, shop.lon], Math.max(map.getZoom(), 16), { duration: 0.7 });
         });
 
-        ramenCluster.addLayer(marker);
+        cluster.addLayer(marker);
     });
 
-    ramenCluster.addTo(map);
+    chainCluster.addTo(map);
+    individualCluster.addTo(map);
 }
 
 // ===================================================================
-// フィルターコントロール（右上）
+// フィルターコントロール（タイトル・駅一覧タブのすぐ下に配置）
 // ===================================================================
-const FilterControl = L.Control.extend({
-    options: { position: 'topright' },
-    onAdd: function() {
-        const container = L.DomUtil.create('div', 'filter-panel');
-        L.DomEvent.disableClickPropagation(container);
-        L.DomEvent.disableScrollPropagation(container);
-        const roadSubHtml = roadDefs.map(road => `
-            <label class="filter-item filter-sub-item">
-                <input type="checkbox" id="${road.id}Filter" checked>
-                <div class="filter-road-line-icon" style="background:${road.color};"></div>
-                <span>${road.label}</span>
+function buildFilterPanel() {
+    const container = L.DomUtil.create('div', 'filter-panel');
+    container.id = 'filterPanel';
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    const roadSubHtml = roadDefs.map(road => `
+        <label class="filter-item filter-sub-item">
+            <input type="checkbox" id="${road.id}Filter" checked>
+            <div class="filter-road-line-icon" style="background:${road.color};"></div>
+            <span>${road.label}</span>
+        </label>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="filter-title">表示切り替え</div>
+        <label class="filter-item">
+            <input type="checkbox" id="chainFilter" checked>
+            <img class="filter-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
+            <span>チェーン店</span>
+        </label>
+        <label class="filter-item">
+            <input type="checkbox" id="individualFilter" checked>
+            <img class="filter-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png">
+            <span>個人店</span>
+        </label>
+        <div class="filter-divider"></div>
+        <label class="filter-item">
+            <input type="checkbox" id="stationFilter" checked>
+            <img class="filter-pin" src="${_GREY_PIN_URL}">
+            <span>駅</span>
+        </label>
+        <div class="filter-divider"></div>
+        <div class="filter-roads-header">
+            <label class="filter-item" style="margin:0;flex:1;">
+                <input type="checkbox" id="roadsFilter" checked>
+                <div class="filter-road-line-icon"></div>
+                <span>国道・街道</span>
             </label>
-        `).join('');
+            <button class="filter-roads-toggle" id="roadsToggle" title="個別切替">▼</button>
+        </div>
+        <div class="filter-roads-sub" id="roadsSub">
+            ${roadSubHtml}
+        </div>
+    `;
 
-        container.innerHTML = `
-            <div class="filter-title">表示切り替え</div>
-            <label class="filter-item">
-                <input type="checkbox" id="ramenFilter" checked>
-                <img class="filter-pin"
-                     src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
-                <span>ラーメン店</span>
-            </label>
-            <div class="filter-divider"></div>
-            <label class="filter-item">
-                <input type="checkbox" id="stationFilter" checked>
-                <img class="filter-pin" src="${_GREY_PIN_URL}">
-                <span>駅</span>
-            </label>
-            <div class="filter-divider"></div>
-            <div class="filter-roads-header">
-                <label class="filter-item" style="margin:0;flex:1;">
-                    <input type="checkbox" id="roadsFilter" checked>
-                    <div class="filter-road-line-icon"></div>
-                    <span>国道・街道</span>
-                </label>
-                <button class="filter-roads-toggle" id="roadsToggle" title="個別切替">▼</button>
-            </div>
-            <div class="filter-roads-sub" id="roadsSub">
-                ${roadSubHtml}
-            </div>
-        `;
+    container.querySelector('#stationFilter').addEventListener('change', function() {
+        this.checked ? stationsLayerGroup.addTo(map) : map.removeLayer(stationsLayerGroup);
+    });
 
-        container.querySelector('#ramenFilter').addEventListener('change', function() {
-            this.checked ? ramenCluster.addTo(map) : map.removeLayer(ramenCluster);
-        });
-        container.querySelector('#stationFilter').addEventListener('change', function() {
-            this.checked ? stationsLayerGroup.addTo(map) : map.removeLayer(stationsLayerGroup);
-        });
+    container.querySelector('#chainFilter').addEventListener('change', function() {
+        setChainVisible(this.checked);
+    });
+    container.querySelector('#individualFilter').addEventListener('change', function() {
+        setIndividualVisible(this.checked);
+    });
 
-        const masterCb = container.querySelector('#roadsFilter');
-        masterCb.addEventListener('change', function() {
-            roadDefs.forEach(road => {
-                const cb = container.querySelector(`#${road.id}Filter`);
-                cb.checked = this.checked;
-                this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
-            });
-        });
-
+    const masterCb = container.querySelector('#roadsFilter');
+    masterCb.addEventListener('change', function() {
         roadDefs.forEach(road => {
-            container.querySelector(`#${road.id}Filter`).addEventListener('change', function() {
-                this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
-                const checkedCount = roadDefs.filter(r => container.querySelector(`#${r.id}Filter`).checked).length;
-                masterCb.indeterminate = checkedCount > 0 && checkedCount < roadDefs.length;
-                masterCb.checked = checkedCount === roadDefs.length;
-            });
+            const cb = container.querySelector(`#${road.id}Filter`);
+            cb.checked = this.checked;
+            this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
         });
+    });
 
-        const toggleBtn = container.querySelector('#roadsToggle');
-        const subPanel  = container.querySelector('#roadsSub');
-        toggleBtn.addEventListener('click', function() {
-            const isOpen = subPanel.classList.toggle('open');
-            toggleBtn.textContent = isOpen ? '▲' : '▼';
+    roadDefs.forEach(road => {
+        container.querySelector(`#${road.id}Filter`).addEventListener('change', function() {
+            this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
+            const checkedCount = roadDefs.filter(r => container.querySelector(`#${r.id}Filter`).checked).length;
+            masterCb.indeterminate = checkedCount > 0 && checkedCount < roadDefs.length;
+            masterCb.checked = checkedCount === roadDefs.length;
         });
+    });
 
-        return container;
-    }
-});
-new FilterControl().addTo(map);
+    const toggleBtn = container.querySelector('#roadsToggle');
+    const subPanel  = container.querySelector('#roadsSub');
+    toggleBtn.addEventListener('click', function() {
+        const isOpen = subPanel.classList.toggle('open');
+        toggleBtn.textContent = isOpen ? '▲' : '▼';
+    });
+
+    document.body.appendChild(container);
+    return container;
+}
+buildFilterPanel();
+
+// タイトル枠 → 駅一覧タブ → 表示切り替え枠の順に、上から詰めて配置する。
+// 各枠は top を固定値で持つため、国道・街道の折りたたみを開閉しても
+// 自分より上にある枠の位置は動かない。
+function layoutLeftStack() {
+    const infoPanel   = document.querySelector('.info-panel');
+    const stationTab  = document.getElementById('stationToggleBtn');
+    const filterPanel = document.getElementById('filterPanel');
+    if (!infoPanel || !stationTab || !filterPanel) return;
+
+    const gap = 12;
+    const infoBottom = infoPanel.getBoundingClientRect().bottom;
+    stationTab.style.top = `${infoBottom + gap}px`;
+
+    const stationBottom = stationTab.getBoundingClientRect().bottom;
+    filterPanel.style.top = `${stationBottom + gap}px`;
+}
+layoutLeftStack();
+window.addEventListener('resize', layoutLeftStack);
 
 // ===================================================================
 // 凡例トグル
@@ -567,6 +630,46 @@ new FilterControl().addTo(map);
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
+    });
+})();
+
+// ===================================================================
+// チェーン店 / 個人店フィルター（表示切り替えパネルから操作）
+// ===================================================================
+function setChainVisible(checked) {
+    checked ? chainCluster.addTo(map) : map.removeLayer(chainCluster);
+    const cb = document.getElementById('chainFilter');
+    if (cb) cb.checked = checked;
+}
+function setIndividualVisible(checked) {
+    checked ? individualCluster.addTo(map) : map.removeLayer(individualCluster);
+    const cb = document.getElementById('individualFilter');
+    if (cb) cb.checked = checked;
+}
+
+// ===================================================================
+// About モーダル
+// ===================================================================
+(function() {
+    const overlay   = document.getElementById('aboutModal');
+    const container = document.getElementById('aboutModalContainer');
+    const openBtn   = document.getElementById('about-btn');
+    const closeBtn  = document.getElementById('modalCloseBtn');
+
+    function openModal() { overlay.classList.add('open'); }
+    function closeModal() { overlay.classList.remove('open'); }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+
+    // 背景（オーバーレイ）クリックで閉じる
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeModal();
+    });
+
+    // Escape キーで閉じる
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
     });
 })();
 

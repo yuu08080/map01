@@ -61,6 +61,36 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .legend-pin   { width: 13px; height: 21px; object-fit: contain; flex-shrink: 0; }
 .legend-line  { width: 28px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 
+/* フィルター付き凡例アイテム（チェックボックス） */
+.legend-item-cb {
+    cursor: pointer;
+    user-select: none;
+}
+.legend-item-cb input[type="checkbox"] {
+    cursor: pointer;
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    margin: 0;
+    accent-color: #2980b9;
+}
+
+/* 凡例内セパレーター */
+.legend-divider-thin {
+    border-top: 1px solid #e5e5e5;
+    margin: 6px 0;
+}
+
+/* 駅500m圏 凡例アイコン */
+.legend-circle-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(39,174,96,0.55);
+    background: rgba(39,174,96,0.12);
+    flex-shrink: 0;
+}
+
 /* 凡例：駅（グレー円） */
 .legend-station-marker {
     width: 12px;
@@ -73,13 +103,11 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 
 /* ===================================================================
-   駅一覧トグルボタン（左中央）
+   駅一覧トグルボタン（タイトル枠のすぐ下・top は JS で算出）
    =================================================================== */
 .station-toggle-btn {
     position: absolute;
     left: 0;
-    top: 50%;
-    transform: translateY(-50%);
     z-index: 500;
     background: #2980b9;
     color: white;
@@ -209,9 +237,12 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .update-date    { font-size: 10px; color: #bbb; margin-top: 5px; }
 
 /* ===================================================================
-   フィルターコントロール（右上・Leafletコントロール内）
+   フィルターコントロール（駅一覧タブのすぐ下・top は JS で算出）
    =================================================================== */
 .filter-panel {
+    position: absolute;
+    left: 20px;
+    z-index: 400;
     background: rgba(255,255,255,0.93);
     padding: 10px 14px;
     border-radius: 8px;
@@ -330,12 +361,17 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     border: 3px solid transparent;
 }
 
-/* 低密度（< 5件）：青系 */
-.cluster-low  { background: rgba(52,152,219,0.78);  border-color: rgba(41,128,185,0.90); }
-/* 中密度（5〜19件）：黄系 */
-.cluster-mid  { background: rgba(241,196,15,0.82);  border-color: rgba(211,168,8,0.95); }
-/* 高密度（20件以上）：赤系 */
-.cluster-high { background: rgba(231,76,60,0.82);   border-color: rgba(192,57,43,0.95); }
+/* 低密度（< 5件）：淡オレンジ */
+.cluster-low  { background: rgba(245,175,100,0.88); border-color: rgba(200,130,50,0.95); }
+/* 中密度（5〜19件）：中オレンジ */
+.cluster-mid  { background: rgba(228,120,30,0.90);  border-color: rgba(180,90,15,0.95); }
+/* 高密度（20件以上）：濃いバーントオレンジ */
+.cluster-high { background: rgba(185,60,10,0.92);   border-color: rgba(140,40,5,0.98); }
+
+/* チェーン店クラスター（青系） */
+.cluster-chain-low  { background: rgba(80,155,240,0.88); border-color: rgba(40,110,195,0.95); }
+.cluster-chain-mid  { background: rgba(40,120,220,0.90); border-color: rgba(15, 80,175,0.95); }
+.cluster-chain-high { background: rgba(10, 75,170,0.92); border-color: rgba(5,  45,130,0.98); }
 
 .cluster-inner {
     font-size: 13px;
@@ -343,6 +379,198 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.45);
     line-height: 1;
+}
+
+/* ===================================================================
+   About ボタン（右上・locate-btn のさらに左 6px）
+   =================================================================== */
+.about-btn {
+    position: absolute;
+    top: 10px;
+    right: 82px;
+    z-index: 1000;
+    height: 30px;
+    padding: 0 10px;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    transition: background-color 0.15s, color 0.15s;
+    gap: 4px;
+}
+
+.about-btn:hover  { background-color: #f0f4ff; color: #2979FF; }
+.about-btn:active { background-color: #dce8ff; }
+
+/* ===================================================================
+   About モーダル — オーバーレイ
+   =================================================================== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* モーダル本体 */
+.modal-container {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 720px;
+    width: calc(100% - 40px);
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 32px 28px 28px;
+    position: relative;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    transform: scale(0.95);
+    transition: transform 0.25s ease;
+}
+
+.modal-overlay.open .modal-container {
+    transform: scale(1);
+}
+
+/* × 閉じるボタン */
+.modal-close-btn {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+}
+
+.modal-close-btn:hover { background: #f0f0f0; color: #333; }
+
+/* プロジェクトタイトル */
+.modal-project-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #222;
+    margin-bottom: 4px;
+    padding-right: 36px;
+    line-height: 1.3;
+}
+
+.modal-subtitle {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 0;
+}
+
+.modal-divider {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 18px 0;
+}
+
+.modal-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #aaa;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.modal-description {
+    font-size: 13px;
+    color: #444;
+    line-height: 1.8;
+    margin: 0;
+}
+
+/* ===================================================================
+   メンバーカード（Gridレイアウト）
+   =================================================================== */
+.member-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 16px;
+    margin-top: 4px;
+}
+
+.member-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px 14px 16px;
+    text-align: center;
+    transition: box-shadow 0.18s, transform 0.18s;
+}
+
+.member-card:hover {
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    transform: translateY(-3px);
+}
+
+.member-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 12px;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.member-name {
+    font-size: 14px;
+    font-weight: bold;
+    color: #222;
+    margin-bottom: 3px;
+}
+
+.member-role {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+.member-title {
+    display: inline-block;
+    font-size: 10px;
+    color: #2980b9;
+    background: #e8f4fd;
+    border: 1px solid #bee3f8;
+    border-radius: 20px;
+    padding: 2px 10px;
+    margin-bottom: 10px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.member-bio {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.6;
 }
 
 /* ===================================================================
@@ -417,7 +645,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     .legend-line { width: 20px; }
 
     /* --- フィルターパネル --- */
-    .filter-panel  { padding: 7px 10px; min-width: 110px; }
+    .filter-panel  { left: 10px; padding: 7px 10px; min-width: 110px; }
     .filter-title  { font-size: 11px; margin-bottom: 5px; padding-bottom: 4px; }
     .filter-item   { font-size: 11px; margin: 3px 0; }
 
@@ -444,4 +672,29 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
     /* --- 現在地ボタン --- */
     .locate-btn { width: 36px; height: 36px; }
+
+    /* --- About ボタン --- */
+    .about-btn {
+        right: 88px;
+        font-size: 11px;
+        height: 36px;
+    }
+
+    /* --- About モーダル --- */
+    .modal-container {
+        width: calc(100% - 20px);
+        padding: 24px 16px 20px;
+        max-height: 90vh;
+    }
+
+    .modal-project-title { font-size: 17px; }
+
+    .member-cards {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
+    .member-card { padding: 16px 10px 12px; }
+    .member-photo { width: 64px; height: 64px; }
+    .member-name  { font-size: 13px; }
 }
