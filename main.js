@@ -278,54 +278,280 @@ function renderParking(parkingStr) {
 }
 
 // ===================================================================
-// レビュー機能（LocalStorage保存）
+// 管理者モード（SHA-256ハッシュ照合・LocalStorage永続化）
 // ===================================================================
-function reviewStorageKey(name) {
-    return `ramenMapReview:${name}`;
+// パスワード「08080819」のSHA-256ハッシュ値。平文はコードに残さない。
+const ADMIN_PASS_HASH = 'e3ab5aa0433bf98881bfe4745029541658b3d05ff32cc8f30d4ac27bc02c9811';
+const ADMIN_STORAGE_KEY = 'isAdmin';
+
+// 端末（ブラウザ）ごとの匿名IDを1つ発行して保持する（レビューの投稿者識別用）
+function getDeviceId() {
+    const KEY = 'ramenMapDeviceId';
+    try {
+        let id = localStorage.getItem(KEY);
+        if (!id) {
+            id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+            localStorage.setItem(KEY, id);
+        }
+        return id;
+    } catch (e) {
+        return 'dev-anonymous';
+    }
+}
+const DEVICE_ID = getDeviceId();
+
+function isAdminLoggedIn() {
+    return localStorage.getItem(ADMIN_STORAGE_KEY) === 'true';
 }
 
-function loadReview(name) {
-    try {
-        const raw = localStorage.getItem(reviewStorageKey(name));
-        return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-        return null;
+// Web Crypto APIでテキストをSHA-256ハッシュ化し、16進文字列で返す
+async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// prompt()は平文入力しか出せないため、type="password"（入力中は●で伏字）の
+// 専用モーダルを使ってパスワードを入力させる
+function openAdminPasswordModal() {
+    const overlay = document.getElementById('adminPasswordModal');
+    const input   = document.getElementById('adminPasswordInput');
+    if (!overlay || !input) return;
+    input.value = '';
+    overlay.classList.add('open');
+    setTimeout(() => input.focus(), 50);
+}
+
+function closeAdminPasswordModal() {
+    const overlay = document.getElementById('adminPasswordModal');
+    if (overlay) overlay.classList.remove('open');
+}
+
+async function submitAdminPassword() {
+    const input = document.getElementById('adminPasswordInput');
+    if (!input || !input.value) return;
+
+    const hash = await sha256Hex(input.value);
+    if (hash === ADMIN_PASS_HASH) {
+        closeAdminPasswordModal();
+        localStorage.setItem(ADMIN_STORAGE_KEY, 'true');
+        alert('管理者権限を有効化しました');
+        location.reload();
+    } else {
+        alert('パスワードが違います。');
+        input.value = '';
+        input.focus();
     }
 }
 
-function saveReview(name, rating, comment) {
+function adminLogout() {
+    localStorage.removeItem(ADMIN_STORAGE_KEY);
+    location.reload();
+}
+
+function updateAdminBadge() {
+    const loggedIn  = isAdminLoggedIn();
+    const badge     = document.getElementById('adminModeBadge');
+    const reviewsBtn = document.getElementById('adminReviewsBtn');
+    if (badge)      badge.style.display = loggedIn ? 'block' : 'none';
+    if (reviewsBtn) reviewsBtn.style.display = loggedIn ? 'block' : 'none';
+}
+
+// LocalStorageに保存された全店舗ぶんの `ramenMapReviews:店舗名` を横断して集約する
+function collectAllReviews() {
+    const all = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith('ramenMapReviews:')) continue;
+        const shopName = key.slice('ramenMapReviews:'.length);
+        let list;
+        try {
+            list = JSON.parse(localStorage.getItem(key));
+        } catch (e) {
+            continue;
+        }
+        if (!Array.isArray(list)) continue;
+        list.forEach(r => all.push({ ...r, shopName }));
+    }
+    return all.sort((a, b) => b.savedAt - a.savedAt);
+}
+
+function renderAdminReviewsList() {
+    const container = document.getElementById('adminReviewsListItems');
+    const summary   = document.getElementById('adminReviewsSummary');
+    if (!container) return;
+
+    const all = collectAllReviews();
+    if (summary) summary.textContent = `合計 ${all.length} 件のレビューがあります。`;
+
+    container.innerHTML = all.length === 0
+        ? '<div class="popup-review-empty">レビューはありません</div>'
+        : all.map(r => {
+            const date  = new Date(r.savedAt).toLocaleDateString('ja-JP');
+            const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+            return `
+                <div class="popup-review-entry">
+                    <div class="admin-review-shop">🍜 ${escapeHtml(r.shopName)}</div>
+                    <div class="popup-review-entry-stars">${stars}</div>
+                    <div class="popup-review-entry-date">${date}</div>
+                    <div class="popup-review-entry-comment">${escapeHtml(r.comment || '（コメントなし）')}</div>
+                    <div class="popup-review-entry-actions">
+                        <button type="button" class="popup-btn popup-btn-red admin-review-delete"
+                                data-shop="${escapeHtml(r.shopName)}" data-id="${escapeHtml(r.id)}">🗑️ 削除</button>
+                    </div>
+                </div>`;
+        }).join('');
+}
+
+function openAdminReviewsModal() {
+    if (!isAdminLoggedIn()) return;
+    renderAdminReviewsList();
+    const overlay = document.getElementById('adminReviewsModal');
+    if (overlay) overlay.classList.add('open');
+}
+
+function closeAdminReviewsModal() {
+    const overlay = document.getElementById('adminReviewsModal');
+    if (overlay) overlay.classList.remove('open');
+}
+
+function initAdminMode() {
+    const dot       = document.getElementById('adminHiddenDot');
+    const badge     = document.getElementById('adminModeBadge');
+    const overlay   = document.getElementById('adminPasswordModal');
+    const closeBtn  = document.getElementById('adminPasswordCloseBtn');
+    const submitBtn = document.getElementById('adminPasswordSubmitBtn');
+    const input     = document.getElementById('adminPasswordInput');
+
+    if (dot)   dot.addEventListener('click', openAdminPasswordModal);
+    if (badge) badge.addEventListener('click', adminLogout);
+    if (closeBtn) closeBtn.addEventListener('click', closeAdminPasswordModal);
+    if (submitBtn) submitBtn.addEventListener('click', submitAdminPassword);
+    if (input) {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submitAdminPassword();
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeAdminPasswordModal();
+        });
+    }
+
+    // 管理者限定: 全店舗のレビュー一覧モーダル
+    const reviewsBtn       = document.getElementById('adminReviewsBtn');
+    const reviewsOverlay   = document.getElementById('adminReviewsModal');
+    const reviewsCloseBtn  = document.getElementById('adminReviewsCloseBtn');
+    const reviewsListItems = document.getElementById('adminReviewsListItems');
+
+    if (reviewsBtn) reviewsBtn.addEventListener('click', openAdminReviewsModal);
+    if (reviewsCloseBtn) reviewsCloseBtn.addEventListener('click', closeAdminReviewsModal);
+    if (reviewsOverlay) {
+        reviewsOverlay.addEventListener('click', (e) => {
+            if (e.target === reviewsOverlay) closeAdminReviewsModal();
+        });
+    }
+    if (reviewsListItems) {
+        reviewsListItems.addEventListener('click', (e) => {
+            const btn = e.target.closest('.admin-review-delete');
+            if (!btn) return;
+            if (!confirm('本当に削除しますか？')) return;
+            removeReview(btn.dataset.shop, btn.dataset.id);
+            renderAdminReviewsList();
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (overlay && overlay.classList.contains('open')) closeAdminPasswordModal();
+        if (reviewsOverlay && reviewsOverlay.classList.contains('open')) closeAdminReviewsModal();
+    });
+
+    updateAdminBadge();
+}
+
+// ===================================================================
+// レビュー機能（LocalStorage保存・店舗ごとに複数件のレビューを配列で保持）
+// ===================================================================
+function reviewsStorageKey(name) {
+    return `ramenMapReviews:${name}`;
+}
+
+function loadReviews(name) {
     try {
-        localStorage.setItem(reviewStorageKey(name), JSON.stringify({ rating, comment, savedAt: Date.now() }));
+        const raw = localStorage.getItem(reviewsStorageKey(name));
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveReviews(name, list) {
+    try {
+        localStorage.setItem(reviewsStorageKey(name), JSON.stringify(list));
     } catch (e) {
         console.warn('[ラーメンマップ] レビューの保存に失敗しました:', e.message);
     }
+}
+
+function addReview(name, rating, comment) {
+    const list = loadReviews(name);
+    list.push({
+        id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2),
+        rating, comment, savedAt: Date.now(), authorId: DEVICE_ID
+    });
+    saveReviews(name, list);
+}
+
+// 編集時は投稿者IDを維持する（管理者が他人のレビューを編集しても投稿者は変わらない）
+function updateReview(name, id, rating, comment) {
+    const list = loadReviews(name);
+    const idx = list.findIndex(r => r.id === id);
+    if (idx === -1) return;
+    list[idx] = { ...list[idx], rating, comment, savedAt: Date.now() };
+    saveReviews(name, list);
+}
+
+// 通常は投稿者本人のブラウザからのみ削除できるが、管理者モードなら誰の投稿でも削除できる
+function removeReview(name, id) {
+    saveReviews(name, loadReviews(name).filter(r => r.id !== id));
 }
 
 function buildReviewViewHtml(shop) {
     const stars = [1, 2, 3, 4, 5].map(n => `<span class="popup-star" data-value="${n}">☆</span>`).join('');
     return `
         <div class="popup-review-title">📝 ${escapeHtml(shop.name)} のレビュー</div>
-        <div class="popup-review-existing"></div>
-        <div class="popup-star-row">${stars}</div>
-        <textarea class="popup-review-comment" rows="3" placeholder="コメントを入力してください..."></textarea>
-        <div class="popup-review-actions">
-            <button type="button" class="popup-btn popup-btn-orange popup-review-submit">送信</button>
-            <button type="button" class="popup-btn popup-btn-grey popup-review-back">戻る</button>
+        <div class="popup-review-list">
+            <div class="popup-review-list-items"></div>
+            <button type="button" class="popup-btn popup-btn-grey popup-review-list-back">戻る</button>
+        </div>
+        <div class="popup-review-form">
+            <div class="popup-star-row">${stars}</div>
+            <textarea class="popup-review-comment" rows="3" placeholder="コメントを入力してください..."></textarea>
+            <div class="popup-review-actions">
+                <button type="button" class="popup-btn popup-btn-orange popup-review-submit">送信</button>
+                <button type="button" class="popup-btn popup-btn-grey popup-review-back-form">戻る</button>
+            </div>
         </div>
     `;
 }
 
 function wireUpReviewEvents(root, shop) {
-    const infoView   = root.querySelector('.popup-info-view');
-    const reviewView = root.querySelector('.popup-review-view');
-    const toggleBtn  = root.querySelector('.popup-review-toggle');
-    const backBtn    = root.querySelector('.popup-review-back');
-    const submitBtn  = root.querySelector('.popup-review-submit');
-    const commentEl  = root.querySelector('.popup-review-comment');
-    const existingEl = root.querySelector('.popup-review-existing');
-    const starEls    = root.querySelectorAll('.popup-star');
+    const infoView    = root.querySelector('.popup-info-view');
+    const reviewView  = root.querySelector('.popup-review-view');
+    const listView    = root.querySelector('.popup-review-list');
+    const formView    = root.querySelector('.popup-review-form');
+    const writeBtn    = root.querySelector('.popup-review-write-toggle');
+    const viewBtn     = root.querySelector('.popup-review-view-toggle');
+    const listItemsEl = root.querySelector('.popup-review-list-items');
+    const listBackBtn = root.querySelector('.popup-review-list-back');
+    const backFormBtn = root.querySelector('.popup-review-back-form');
+    const submitBtn   = root.querySelector('.popup-review-submit');
+    const commentEl   = root.querySelector('.popup-review-comment');
+    const starEls     = root.querySelectorAll('.popup-star');
 
     let selectedRating = 0;
+    let editingId = null; // null = 新規投稿 / 文字列 = そのIDのレビューを編集中
 
     function renderStars() {
         starEls.forEach(star => {
@@ -334,20 +560,52 @@ function wireUpReviewEvents(root, shop) {
         });
     }
 
-    function refreshReviewView() {
-        const saved = loadReview(shop.name);
-        if (saved) {
-            selectedRating = saved.rating;
-            commentEl.value = saved.comment || '';
-            const savedDate = new Date(saved.savedAt).toLocaleDateString('ja-JP');
-            existingEl.innerHTML =
-                `前回の投稿（${savedDate}）：${'★'.repeat(saved.rating)}${'☆'.repeat(5 - saved.rating)}<br>${escapeHtml(saved.comment || '（コメントなし）')}`;
-        } else {
-            selectedRating = 0;
-            commentEl.value = '';
-            existingEl.innerHTML = 'まだレビューが投稿されていません。';
-        }
+    function showInfoView() {
+        reviewView.style.display = 'none';
+        infoView.style.display = 'block';
+    }
+
+    // 自分（同じ端末）または管理者モードのときだけ、そのレビューの編集・削除を許可する
+    function canManage(review) {
+        const isOwner = !review.authorId || review.authorId === DEVICE_ID;
+        return isAdminLoggedIn() || isOwner;
+    }
+
+    function showList() {
+        const list = loadReviews(shop.name).slice().sort((a, b) => b.savedAt - a.savedAt);
+        listItemsEl.innerHTML = list.length === 0
+            ? '<div class="popup-review-empty">レビューはありません</div>'
+            : list.map(r => {
+                const isOwner = !r.authorId || r.authorId === DEVICE_ID;
+                const date = new Date(r.savedAt).toLocaleDateString('ja-JP');
+                const starStr = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+                const actionsHtml = canManage(r) ? `
+                    <div class="popup-review-entry-actions">
+                        <button type="button" class="popup-btn popup-btn-blue popup-review-entry-edit" data-id="${escapeHtml(r.id)}">✏️ 編集</button>
+                        <button type="button" class="popup-btn popup-btn-red popup-review-entry-delete" data-id="${escapeHtml(r.id)}">🗑️ 削除</button>
+                    </div>` : '';
+                return `
+                    <div class="popup-review-entry">
+                        <div class="popup-review-entry-stars">${starStr}</div>
+                        <div class="popup-review-entry-date">${date}${isOwner ? '（あなたの投稿）' : ''}</div>
+                        <div class="popup-review-entry-comment">${escapeHtml(r.comment || '（コメントなし）')}</div>
+                        ${actionsHtml}
+                    </div>`;
+            }).join('');
+
+        formView.style.display = 'none';
+        listView.style.display = 'block';
+    }
+
+    // editingReview: null = 新規投稿フォーム / レビューオブジェクト = そのレビューを編集
+    function showForm(editingReview) {
+        editingId = editingReview ? editingReview.id : null;
+        selectedRating  = editingReview ? editingReview.rating : 0;
+        commentEl.value = editingReview ? (editingReview.comment || '') : '';
+        submitBtn.textContent = editingReview ? '保存' : '送信';
         renderStars();
+        listView.style.display = 'none';
+        formView.style.display = 'block';
     }
 
     starEls.forEach(star => {
@@ -357,15 +615,39 @@ function wireUpReviewEvents(root, shop) {
         });
     });
 
-    toggleBtn.addEventListener('click', () => {
-        infoView.style.display = 'none';
+    writeBtn.addEventListener('click', () => {
+        infoView.style.display   = 'none';
         reviewView.style.display = 'block';
-        refreshReviewView();
+        showForm(null);
     });
 
-    backBtn.addEventListener('click', () => {
-        reviewView.style.display = 'none';
-        infoView.style.display = 'block';
+    viewBtn.addEventListener('click', () => {
+        infoView.style.display   = 'none';
+        reviewView.style.display = 'block';
+        showList();
+    });
+
+    // 一覧内の「編集」「削除」ボタンはイベント委譲で処理する
+    listItemsEl.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.popup-review-entry-edit');
+        const deleteBtn = e.target.closest('.popup-review-entry-delete');
+        if (editBtn) {
+            const review = loadReviews(shop.name).find(r => r.id === editBtn.dataset.id);
+            if (review && canManage(review)) showForm(review);
+        } else if (deleteBtn) {
+            const review = loadReviews(shop.name).find(r => r.id === deleteBtn.dataset.id);
+            if (!review || !canManage(review)) return;
+            if (!confirm('本当に削除しますか？')) return;
+            removeReview(shop.name, review.id);
+            showList();
+        }
+    });
+
+    listBackBtn.addEventListener('click', showInfoView);
+
+    backFormBtn.addEventListener('click', () => {
+        // 編集中にキャンセルした場合は一覧へ、新規投稿中は情報カードへ戻る
+        editingId ? showList() : showInfoView();
     });
 
     submitBtn.addEventListener('click', () => {
@@ -373,8 +655,13 @@ function wireUpReviewEvents(root, shop) {
             alert('星評価を選択してください。');
             return;
         }
-        saveReview(shop.name, selectedRating, commentEl.value.trim());
-        refreshReviewView();
+        if (editingId) {
+            updateReview(shop.name, editingId, selectedRating, commentEl.value.trim());
+        } else {
+            addReview(shop.name, selectedRating, commentEl.value.trim());
+        }
+        editingId = null;
+        showList();
     });
 }
 
@@ -418,7 +705,8 @@ function buildRichPopupElement(shop) {
             <div class="popup-actions">
                 <a href="${gmapsUrl}" target="_blank" class="popup-btn popup-btn-green">🗺️ Google Mapで経路を検索</a>
                 <a href="${searchUrl}" target="_blank" class="popup-btn popup-btn-blue">🔍 詳細を検索</a>
-                <button type="button" class="popup-btn popup-btn-orange popup-review-toggle">📝 レビューを書く / 見る</button>
+                <button type="button" class="popup-btn popup-btn-orange popup-review-write-toggle">✍️ レビューを書く</button>
+                <button type="button" class="popup-btn popup-btn-grey popup-review-view-toggle">👀 レビューを見る（${loadReviews(shop.name).length}件）</button>
             </div>
         </div>
         <div class="popup-review-view" style="display:none;">
@@ -667,7 +955,18 @@ function buildCategoryToggleItem(itemClass, pinClass, category, color) {
     return label;
 }
 
-// 凡例（右下）と表示切り替えパネル（左）の両方にカテゴリごとのチェックボックスを生成する
+// 凡例用：チェックボックスの無い、色見本のみの表示アイテム
+function buildCategoryLegendItem(category, color) {
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.innerHTML = `
+        <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png">
+        <span style="font-size:12px; color:#333;">${escapeHtml(category)}</span>
+    `;
+    return div;
+}
+
+// 凡例（右下・表示のみ）と表示切り替えパネル（左・チェックボックス付き）を生成する
 function buildCategoryLegend() {
     const legendContainer = document.getElementById('legendCategoryItems');
     const filterContainer = document.getElementById('filterCategoryItems');
@@ -677,7 +976,7 @@ function buildCategoryLegend() {
 
     categoryClusters.forEach(({ color }, category) => {
         if (legendContainer) {
-            legendContainer.appendChild(buildCategoryToggleItem('legend-item legend-item-cb', 'legend-pin', category, color));
+            legendContainer.appendChild(buildCategoryLegendItem(category, color));
         }
         if (filterContainer) {
             filterContainer.appendChild(buildCategoryToggleItem('filter-item', 'filter-pin', category, color));
@@ -881,6 +1180,8 @@ window.addEventListener('resize', layoutLeftStack);
         if (e.key === 'Escape') closeModal();
     });
 })();
+
+initAdminMode();
 
 // ===================================================================
 // ページ読み込み時の自動位置情報取得

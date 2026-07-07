@@ -61,20 +61,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .legend-pin   { width: 13px; height: 21px; object-fit: contain; flex-shrink: 0; }
 .legend-line  { width: 28px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 
-/* フィルター付き凡例アイテム（チェックボックス） */
-.legend-item-cb {
-    cursor: pointer;
-    user-select: none;
-}
-.legend-item-cb input[type="checkbox"] {
-    cursor: pointer;
-    width: 13px;
-    height: 13px;
-    flex-shrink: 0;
-    margin: 0;
-    accent-color: #2980b9;
-}
-
 /* 凡例内セパレーター */
 .legend-divider-thin {
     border-top: 1px solid #e5e5e5;
@@ -380,6 +366,105 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     text-shadow: 0 1px 3px rgba(0,0,0,0.45);
     line-height: 1;
 }
+
+/* ===================================================================
+   管理者モード（有効中バッジ・Aboutモーダル内の隠しログインボタン）
+   =================================================================== */
+.admin-mode-badge {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 2500;
+    background: #fdecea;
+    color: #c0392b;
+    border: 1.5px solid #e74c3c;
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: background-color 0.15s;
+}
+.admin-mode-badge:hover { background: #fbd7d3; }
+
+/* 管理者限定: 全店舗のレビュー一覧を開くボタン（バッジの真上に積む） */
+.admin-reviews-btn {
+    position: absolute;
+    bottom: 64px;
+    left: 20px;
+    z-index: 2500;
+    background: white;
+    color: #555;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    transition: background-color 0.15s, color 0.15s;
+}
+.admin-reviews-btn:hover { background-color: #f0f4ff; color: #2979FF; }
+
+/* 管理者限定: 全店舗のレビュー一覧モーダル */
+.admin-reviews-container {
+    max-width: 560px;
+}
+.admin-review-shop {
+    font-weight: 700;
+    font-size: 12.5px;
+    color: #c0392b;
+    margin-bottom: 4px;
+}
+
+/* Aboutモーダル右下の目立たない隠しログインボタン（見た目はただの中黒） */
+.admin-hidden-dot-wrapper {
+    text-align: right;
+    margin-top: 10px;
+}
+.admin-hidden-dot {
+    display: inline-block;
+    font-size: 11px;
+    color: #ddd;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1;
+    padding: 6px;
+}
+.admin-hidden-dot:hover { color: #bbb; }
+
+/* 管理者パスワード入力モーダル（Aboutモーダルの上に重ねて表示する） */
+#adminPasswordModal { z-index: 2100; }
+
+.admin-password-container {
+    max-width: 320px;
+    padding: 28px 24px 24px;
+}
+.admin-password-title { font-size: 17px; margin-bottom: 4px; }
+
+.admin-password-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    margin: 14px 0;
+    /* type="password" によりブラウザ標準の●伏せ字表示になる */
+}
+.admin-password-input:focus {
+    outline: none;
+    border-color: #4285F4;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+}
+
+.admin-password-submit-btn { width: 100%; }
 
 /* ===================================================================
    About ボタン（右上・locate-btn のさらに左 6px）
@@ -761,6 +846,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .popup-btn-blue     { background: #4285F4; }
 .popup-btn-orange   { background: #f39c12; }
 .popup-btn-grey     { background: #95a5a6; }
+.popup-btn-red      { background: #e74c3c; }
 
 .popup-review-title {
     font-size: 14px;
@@ -769,14 +855,46 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     margin-bottom: 8px;
 }
 
-.popup-review-existing {
+.popup-review-list { display: none; }
+.popup-review-form  { display: none; }
+
+.popup-review-list-items {
+    max-height: 260px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.popup-review-empty {
+    font-size: 12.5px;
+    color: #999;
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 14px 10px;
+    text-align: center;
+}
+
+.popup-review-entry {
     font-size: 11.5px;
-    color: #666;
+    color: #444;
     background: #f8f9fa;
     border-radius: 6px;
     padding: 8px 10px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     line-height: 1.6;
+}
+.popup-review-entry-stars   { color: #f1c40f; font-size: 14px; letter-spacing: 2px; }
+.popup-review-entry-date    { color: #999; font-size: 10.5px; margin-bottom: 3px; }
+.popup-review-entry-comment { color: #333; word-break: break-word; }
+
+.popup-review-entry-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 7px;
+}
+.popup-review-entry-actions .popup-btn {
+    flex: 1;
+    padding: 5px 4px;
+    font-size: 10.5px;
 }
 
 .popup-star-row {
@@ -872,6 +990,10 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
     /* --- 現在地ボタン --- */
     .locate-btn { width: 36px; height: 36px; }
+
+    /* --- 管理者モードバッジ --- */
+    .admin-mode-badge { bottom: 10px; left: 10px; font-size: 11px; padding: 6px 10px; }
+    .admin-reviews-btn { bottom: 48px; left: 10px; font-size: 11px; padding: 6px 10px; }
 
     /* --- About ボタン --- */
     .about-btn {

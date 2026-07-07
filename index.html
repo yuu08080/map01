@@ -16,6 +16,34 @@
 <body>
     <div id="map"></div>
 
+    <!-- 管理者モードバッジ（左下・有効時のみ表示、クリックでログアウト） -->
+    <button id="adminModeBadge" class="admin-mode-badge" style="display:none;">🔐 管理者モード有効中（解除するにはここをクリック）</button>
+
+    <!-- 管理者限定: 全店舗のレビュー一覧を開くボタン（管理者モード有効時のみ表示） -->
+    <button id="adminReviewsBtn" class="admin-reviews-btn" style="display:none;">🗂️ 全店舗のレビュー一覧</button>
+
+    <!-- 管理者パスワード入力モーダル（入力中は●で伏せて表示される） -->
+    <div class="modal-overlay" id="adminPasswordModal" role="dialog" aria-modal="true" aria-labelledby="adminPasswordTitle">
+        <div class="modal-container admin-password-container">
+            <button class="modal-close-btn" id="adminPasswordCloseBtn" aria-label="閉じる">×</button>
+            <div class="modal-project-title admin-password-title" id="adminPasswordTitle">管理者ログイン</div>
+            <p class="modal-description">パスワードを入力してください。</p>
+            <input type="password" id="adminPasswordInput" class="admin-password-input" autocomplete="off" placeholder="パスワード">
+            <button type="button" class="popup-btn popup-btn-orange admin-password-submit-btn" id="adminPasswordSubmitBtn">ログイン</button>
+        </div>
+    </div>
+
+    <!-- 管理者限定: 全店舗のレビュー一覧モーダル -->
+    <div class="modal-overlay" id="adminReviewsModal" role="dialog" aria-modal="true" aria-labelledby="adminReviewsTitle">
+        <div class="modal-container admin-reviews-container">
+            <button class="modal-close-btn" id="adminReviewsCloseBtn" aria-label="閉じる">×</button>
+            <div class="modal-project-title" id="adminReviewsTitle">🗂️ 全店舗のレビュー一覧</div>
+            <p class="modal-description" id="adminReviewsSummary"></p>
+            <hr class="modal-divider">
+            <div id="adminReviewsListItems"></div>
+        </div>
+    </div>
+
     <!-- About ボタン（右上） -->
     <button id="about-btn" class="about-btn" title="このマップについて">About</button>
 
@@ -38,7 +66,7 @@
 
             <div class="modal-section-title">使用しているGoogle Sheetsについて</div>
             <p class="modal-description">
-                店舗データ（店名・緯度経度・カテゴリ・詳細説明・画像URLなど）はGoogleスプレッドシートをデータベースとして管理しており、公開されたCSV形式のURLから <code>fetch()</code> で都度取得しています。そのため、スプレッドシート側の内容を編集するだけで、コードを変更することなくマップ上の店舗情報（追加・修正・カテゴリ変更など）を更新できます。
+                店舗データ（店名・緯度経度・カテゴリ・住所・営業時間・駐車場など）はGoogleスプレッドシートをデータベースとして管理しており、公開されたCSV形式のURLから <code>fetch()</code> で都度取得しています。そのため、スプレッドシート側の内容を編集するだけで、コードを変更することなくマップ上の店舗情報（追加・修正・カテゴリ変更など）を更新できます。
             </p>
 
             <hr class="modal-divider">
@@ -46,8 +74,6 @@
             <div class="modal-section-title">今週追加した機能</div>
             <ul class="modal-feature-list">
                 <li>📊 <b>Googleスプレッドシート連携</b>：ローカルファイル（data.js）を廃止し、オンラインのスプレッドシートから店舗データを動的に取得するように変更</li>
-                <li>🖼️ <b>写真付きポップアップ</b>：スプレッドシートに画像URLが登録されている店舗は、ピンをクリックした際のポップアップに写真を表示</li>
-                <li>🎛️ <b>カテゴリ別フィルター</b>：右下の凡例のチェックボックスから、チェーン店・個人店などカテゴリごとに表示・非表示を切り替え可能</li>
             </ul>
 
             <hr class="modal-divider">
@@ -75,6 +101,11 @@
                     <span class="member-title">役職</span>
                     <div class="member-bio">自己紹介文</div>
                 </div>
+            </div>
+
+            <!-- 隠しログインボタン（右下の目立たない点） -->
+            <div class="admin-hidden-dot-wrapper">
+                <span id="adminHiddenDot" class="admin-hidden-dot" aria-hidden="true">・</span>
             </div>
         </div>
     </div>
@@ -139,7 +170,7 @@
         <button class="legend-tab" id="legendTab">凡例 ▲</button>
     </div>
 
-    <script src="mapData.js"></script>
+    <script src="data.js"></script>
     <script src="main.js"></script>
 </body>
 </html>
