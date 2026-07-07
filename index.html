@@ -31,8 +31,24 @@
 
             <div class="modal-section-title">プロジェクト概要</div>
             <p class="modal-description">
-                本マップは、東葛エリアにおける飲食店の立地戦略を可視化した空間分布マップです。主要駅を中心とした半径500mの『徒歩圏内』に密集する個人店と、モータリゼーション（車社会）を背景に幹線道路沿いに展開する大型チェーン店の生存戦略の違いを、地理的データから比較・分析することを目的としています。
+                本マップは、東葛エリアにおける飲食店の立地戦略を可視化した空間分布マップです。主要駅を中心とした半径500mの『徒歩圏内』に密集する個人店と、モータリゼーション（車社会）を背景に幹線道路沿いに展開する大型チェーン店の生存戦略の違いを、地理的データから比較・分析することを目的としています。今週のアップデートでは、店舗データの管理をGoogleスプレッドシートと連携させ、Web上のデータを直接読み込んで地図に反映する仕組みに移行しました。
             </p>
+
+            <hr class="modal-divider">
+
+            <div class="modal-section-title">使用しているGoogle Sheetsについて</div>
+            <p class="modal-description">
+                店舗データ（店名・緯度経度・カテゴリ・詳細説明・画像URLなど）はGoogleスプレッドシートをデータベースとして管理しており、公開されたCSV形式のURLから <code>fetch()</code> で都度取得しています。そのため、スプレッドシート側の内容を編集するだけで、コードを変更することなくマップ上の店舗情報（追加・修正・カテゴリ変更など）を更新できます。
+            </p>
+
+            <hr class="modal-divider">
+
+            <div class="modal-section-title">今週追加した機能</div>
+            <ul class="modal-feature-list">
+                <li>📊 <b>Googleスプレッドシート連携</b>：ローカルファイル（data.js）を廃止し、オンラインのスプレッドシートから店舗データを動的に取得するように変更</li>
+                <li>🖼️ <b>写真付きポップアップ</b>：スプレッドシートに画像URLが登録されている店舗は、ピンをクリックした際のポップアップに写真を表示</li>
+                <li>🎛️ <b>カテゴリ別フィルター</b>：右下の凡例のチェックボックスから、チェーン店・個人店などカテゴリごとに表示・非表示を切り替え可能</li>
+            </ul>
 
             <hr class="modal-divider">
 
@@ -96,31 +112,18 @@
         <h2>個人店 vs チェーン店 立地・生存戦略マップ</h2>
         <p><span class="shop-count">対象: 柏市・松戸市・流山市・我孫子市</span></p>
         <p style="margin-top:8px; font-size:11px; color:#999;">ピンをクリックで詳細を表示</p>
-        <p class="update-date">データ最終更新日：2026年5月</p>
+        <p class="update-date">店舗データ: Googleスプレッドシートと連携</p>
     </div>
 
     <!-- 凡例（右下・折りたたみ式） -->
     <div class="legend-wrapper" id="legendWrapper">
         <div class="legend-body" id="legendBody">
-            <!-- ラーメン店（表示切替は左下パネルで操作） -->
-            <div class="legend-item">
-                <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
-                <span style="font-size:12px; color:#333;">チェーン店</span>
-            </div>
-            <div class="legend-item">
-                <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png">
-                <span style="font-size:12px; color:#333;">個人店</span>
+            <!-- ラーメン店カテゴリ（Googleスプレッドシートから動的取得し、JSでチェックボックスを生成） -->
+            <div id="legendCategoryItems">
+                <div class="legend-item" id="legendCategoryLoading" style="color:#999;">カテゴリ読み込み中...</div>
             </div>
             <div class="legend-divider-thin"></div>
-            <!-- 駅・500m圏 -->
-            <div class="legend-item">
-                <svg class="legend-pin" viewBox="0 0 25 41" style="width:13px;height:21px;flex-shrink:0;">
-                    <path fill="#808080" stroke="white" stroke-width="1.5"
-                          d="M12.5 1C6.2 1 1 6.2 1 12.5c0 8.4 11.5 27.5 11.5 27.5S24 20.9 24 12.5C24 6.2 18.8 1 12.5 1z"/>
-                    <circle fill="white" cx="12.5" cy="12.5" r="4.5"/>
-                </svg>
-                <span style="font-size:12px; color:#333;">駅</span>
-            </div>
+            <!-- 駅500m圏（駅ピン自体は上のカテゴリ一覧に含まれる） -->
             <div class="legend-item">
                 <div class="legend-circle-icon"></div>
                 <span style="font-size:12px; color:#333;">駅500m圏</span>
@@ -136,7 +139,7 @@
         <button class="legend-tab" id="legendTab">凡例 ▲</button>
     </div>
 
-    <script src="data.js"></script>
+    <script src="mapData.js"></script>
     <script src="main.js"></script>
 </body>
 </html>

@@ -23,55 +23,99 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
 // アイコン定義
 // ===================================================================
 
-// ラーメン店用（個人店：赤ピン / チェーン店：青ピン）
+// ラーメン店用（カテゴリごとに色分け。色名は pointhi/leaflet-color-markers 準拠）
 const createIcon = (color) => new L.Icon({
     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
     shadowSize: [41, 41], shadowAnchor: [12, 41]
 });
-const redIcon = createIcon('red');
-
-// 駅用（グレーピン：ラーメン店と完全に同形・同サイズ、外部URL不要のSVG）
-const _GREY_PIN_URL = 'data:image/svg+xml;base64,' + btoa(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 41">' +
-    '<path fill="#808080" stroke="white" stroke-width="1.5"' +
-    ' d="M12.5 1C6.2 1 1 6.2 1 12.5c0 8.4 11.5 27.5 11.5 27.5S24 20.9 24 12.5C24 6.2 18.8 1 12.5 1z"/>' +
-    '<circle fill="white" cx="12.5" cy="12.5" r="4.5"/>' +
-    '</svg>'
-);
-const stationIcon = new L.Icon({
-    iconUrl: _GREY_PIN_URL,
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
-    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
-    shadowSize: [41, 41], shadowAnchor: [12, 41]
-});
-
-// ===================================================================
-// ポップアップ用ヘルパー関数
-// ===================================================================
-function renderGenre(genre) {
-    if (!genre) return '<span style="color:#aaa;">情報なし</span>';
-    return `<span style="display:inline-block;background:#fff3e0;color:#e65100;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:bold;border:1px solid #ffcc80;">${genre}</span>`;
+const _iconCache = {};
+function getIcon(color) {
+    return _iconCache[color] || (_iconCache[color] = createIcon(color));
 }
 
-function renderHours(hours) {
-    if (!hours || hours === '店舗情報参照') return '<span style="color:#aaa;">店舗情報参照</span>';
-    const isLateNight = /翌|24時間/.test(hours);
-    if (isLateNight) {
-        return `${hours}&nbsp;<span style="display:inline-block;background:#c0392b;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:bold;white-space:nowrap;vertical-align:middle;">🌙深夜営業</span>`;
+// ===================================================================
+// スプレッドシートデータ関連
+// ===================================================================
+
+// 公開されたGoogleスプレッドシートのCSV出力URL（このURLからデータを都度取得する）
+const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQHcC7BRftze6VGcNKcGoFGjd_0hSwkkchUqU4qVfwb8uUjrp0cShLY1ifvkKCmsqJFgUkOrYps5zaG/pub?gid=0&single=true&output=csv';
+
+// カテゴリごとのピン色（未知のカテゴリはフォールバック色を順番に割り当てる）
+const CATEGORY_PRESET_COLORS   = { 'チェーン店': 'red', '個人店': 'blue' };
+const CATEGORY_FALLBACK_COLORS = ['green', 'orange', 'violet', 'black', 'gold'];
+
+// RFC4180準拠の簡易CSVパーサー（引用符・カンマ・改行を含むセルに対応）
+function parseCSV(text) {
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+            if (c === '"') {
+                if (text[i + 1] === '"') { field += '"'; i++; }
+                else { inQuotes = false; }
+            } else {
+                field += c;
+            }
+        } else if (c === '"') {
+            inQuotes = true;
+        } else if (c === ',') {
+            row.push(field); field = '';
+        } else if (c === '\n') {
+            row.push(field); rows.push(row); row = []; field = '';
+        } else if (c === '\r') {
+            // 無視（\r\n の \r 分）
+        } else {
+            field += c;
+        }
     }
-    return hours;
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(cell => cell.trim() !== ''));
 }
 
-function renderParking(parking) {
-    if (!parking) return '<span style="color:#aaa;">情報なし</span>';
-    if (/なし/.test(parking)) return '<span style="color:#e74c3c;">❌ なし</span>';
-    return `<span style="color:#27ae60;">✅ ${parking}</span>`;
+// スプレッドシートのCSVを取得し、店舗オブジェクトの配列に変換する
+async function loadShopsFromSheet() {
+    const res = await fetch(SHEET_CSV_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const rows = parseCSV(text);
+    if (rows.length < 2) return [];
+
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    return rows.slice(1).map(cols => {
+        const rec = {};
+        header.forEach((h, i) => { rec[h] = (cols[i] ?? '').trim(); });
+        return {
+            name: rec.name || '(名称不明)',
+            lat: parseFloat(rec.lat),
+            lon: parseFloat(rec.lng ?? rec.lon),
+            category: rec.category || 'その他',
+            address: rec.address || '',
+            openingHours: rec.opening_hours || rec.openinghours || '',
+            parking: rec.parking || '',
+            imageUrl: rec.image_url || rec.imageurl || rec.image || ''
+        };
+    }).filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon) && s.name);
+}
+
+// データ取得に失敗した場合の通知バナー
+function showDataError() {
+    const div = document.createElement('div');
+    div.textContent = '⚠️ 店舗データの取得に失敗しました。しばらくしてから再読み込みしてください。';
+    div.style.cssText = 'position:absolute;top:70px;left:50%;transform:translateX(-50%);' +
+        'background:#fdecea;color:#c0392b;border:1px solid #e74c3c;padding:8px 16px;' +
+        'border-radius:6px;font-size:12px;font-weight:bold;z-index:2000;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+    document.body.appendChild(div);
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ===================================================================
-// 営業時間パーサー（今日の曜日・現在時刻に基づく営業状況）
+// 営業時間パーサー（今日の曜日・現在時刻に基づく営業状況を判定）
 // ===================================================================
 const _JP_DAY       = { '月':1,'火':2,'水':3,'木':4,'金':5,'土':6,'日':0 };
 const _JP_DAY_NAMES = ['日','月','火','水','木','金','土'];
@@ -134,17 +178,17 @@ function _parseTimePeriods(str) {
     return periods;
 }
 
+// 戻り値: { state: 'open'|'outside'|'closed', todayHoursStr, statusText } または null（判定不能）
 function getShopStatus(hoursStr) {
     if (!hoursStr) return null;
     if (/店舗情報参照|施設に準ずる|不明/.test(hoursStr)) return null;
 
-    const now     = new Date();
-    const today   = now.getDay();
-    const nowMin  = now.getHours() * 60 + now.getMinutes();
-    const todayName = _JP_DAY_NAMES[today];
+    const now    = new Date();
+    const today  = now.getDay();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
 
     if (/24時間/.test(hoursStr)) {
-        return { isOpen: true, todayHoursStr: '24時間営業', statusText: '🟢 営業中（24時間）' };
+        return { state: 'open', todayHoursStr: '24時間営業', statusText: '🟢 営業中' };
     }
 
     // 定休日チェック（第N曜日・不定 は「確定休み」とみなさない）
@@ -156,7 +200,7 @@ function getShopStatus(hoursStr) {
             if (/不定/.test(part))  continue;   // 木不定 など → スキップ
             for (const ch of [...part]) {
                 if ((_JP_DAY[ch] ?? -1) === today) {
-                    return { isOpen: false, todayHoursStr: null, statusText: `🔴 本日（${todayName}）定休日` };
+                    return { state: 'closed', todayHoursStr: null, statusText: '🔴 定休日' };
                 }
             }
         }
@@ -164,7 +208,7 @@ function getShopStatus(hoursStr) {
 
     // セグメント解析（括弧内の注記を除去してから分割）
     const cleaned  = hoursStr.replace(/（[^）]{0,40}）/g,' ').replace(/\([^)]{0,40}\)/g,' ');
-    const segments = cleaned.replace(/<br\s*\/?>/gi,' / ').split(/\s*\/\s*/).map(s=>s.trim()).filter(Boolean);
+    const segments = cleaned.split(/\s*\/\s*/).map(s=>s.trim()).filter(Boolean);
 
     const todayPeriods = [];
     let hasDayPrefix   = false;
@@ -182,73 +226,208 @@ function getShopStatus(hoursStr) {
     }
 
     if (todayPeriods.length === 0) {
-        if (hasDayPrefix) return { isOpen: false, todayHoursStr: null, statusText: `🔴 本日（${todayName}）は休業日` };
+        if (hasDayPrefix) return { state: 'closed', todayHoursStr: null, statusText: '🔴 定休日' };
         return null;
     }
 
     const todayHoursStr = todayPeriods.map(p => `${_fmtMin(p.start)}〜${_fmtMin(p.end)}`).join('・');
     const isOpen        = todayPeriods.some(p => nowMin >= p.start && nowMin < p.end);
 
-    let statusText;
-    if (isOpen) {
-        const cur  = todayPeriods.find(p => nowMin >= p.start && nowMin < p.end);
-        statusText = `🟢 営業中（〜${_fmtMin(cur.end)}）`;
-    } else {
-        const next = todayPeriods.find(p => p.start > nowMin);
-        statusText = next
-            ? `🔴 準備中・休憩中（${_fmtMin(next.start)}〜）`
-            : `🔴 本日の営業終了`;
-    }
-
-    return { isOpen, todayHoursStr, statusText };
+    return {
+        state: isOpen ? 'open' : 'outside',
+        todayHoursStr,
+        statusText: isOpen ? '🟢 営業中' : '⚠️ 営業時間外'
+    };
 }
 
-// ポップアップ HTML を組み立てる
-function buildPopupContent(shop, isChain) {
-    if (!shop) return '';
-    const accentColor = isChain ? '#e74c3c' : '#3498db';
-    const typeLabel   = isChain ? 'チェーン店' : '個人店';
-    const typeBg      = isChain ? '#fef0f0'   : '#ebf5fb';
-    const typeColor   = isChain ? '#c0392b'   : '#2471a3';
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(shop.address.substring(0, 3) + ' ' + shop.name)}`;
-    const gmapsUrl  = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
+const STATUS_THEME = {
+    open:    { bg: '#eafaf1', border: '#27ae60' },
+    outside: { bg: '#fff9e6', border: '#f1c40f' },
+    closed:  { bg: '#fdecea', border: '#e74c3c' }
+};
 
-    const status    = getShopStatus(shop.hours);
+function buildStatusBoxHtml(hoursStr) {
+    const status = getShopStatus(hoursStr);
+    if (!status) return '';
+    const theme = STATUS_THEME[status.state];
     const todayName = _JP_DAY_NAMES[new Date().getDay()];
-
-    let statusHtml = '';
-    if (status) {
-        const bg = status.isOpen ? '#eafaf1' : '#fdecea';
-        const bc = status.isOpen ? '#27ae60' : '#e74c3c';
-        statusHtml = `
-            <div style="margin:5px 0;padding:5px 9px;background:${bg};border-left:3px solid ${bc};border-radius:3px;line-height:1.6;">
-                <span style="font-size:12px;font-weight:bold;">${status.statusText}</span>
-                ${status.todayHoursStr ? `<br><span style="font-size:11px;color:#555;">本日(${todayName})の営業: ${status.todayHoursStr}</span>` : ''}
-            </div>`;
-    }
+    const subLine = status.todayHoursStr
+        ? `本日(${todayName})の営業: ${escapeHtml(status.todayHoursStr)}`
+        : `本日(${todayName})は定休日です`;
 
     return `
-        <div style="font-family:sans-serif;min-width:240px;max-width:300px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;border-bottom:2px solid ${accentColor};padding-bottom:4px;">
-                <h3 style="margin:0;font-size:15px;color:#333;flex:1;margin-right:6px;line-height:1.3;">${shop.name}</h3>
-                <span style="flex-shrink:0;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:10px;background:${typeBg};color:${typeColor};border:1px solid ${accentColor}55;white-space:nowrap;align-self:center;">${typeLabel}</span>
-            </div>
-            <p style="margin:4px 0;font-size:12px;color:#333;word-wrap:break-word;"><b>📍 住所:</b> ${shop.address}</p>
-            <p style="margin:4px 0;font-size:12px;color:#333;"><b>🕒 営業時間:</b><br>${renderHours(shop.hours)}</p>
-            ${statusHtml}
-            <p style="margin:4px 0;font-size:12px;color:#333;background:#f8f9fa;padding:4px 6px;border-radius:3px;"><b>🚗 駐車場:</b> ${renderParking(shop.parking)}</p>
-            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;align-items:center;">
-                <a href="${gmapsUrl}" target="_blank"
-                   style="width:100%;text-align:center;padding:7px 4px;background:#34A853;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;box-sizing:border-box;">
-                   🗺️ Google Mapで経路を検索
-                </a>
-                <a href="${searchUrl}" target="_blank"
-                   style="width:100%;text-align:center;padding:7px 4px;background:#4285F4;color:white;text-decoration:none;border-radius:4px;font-size:11px;font-weight:bold;box-sizing:border-box;">
-                   🔍 詳細を検索
-                </a>
-            </div>
+        <div class="popup-status-box" style="background:${theme.bg};border-left:3px solid ${theme.border};">
+            <span class="popup-status-text">${status.statusText}</span><br>
+            <span class="popup-status-sub">${subLine}</span>
         </div>
     `;
+}
+
+function renderOpeningHours(hoursStr) {
+    if (!hoursStr) return '<span class="popup-muted">情報なし</span>';
+    const isLateNight = /翌|24:00|25:00|24時間/.test(hoursStr);
+    const badge = isLateNight ? ' <span class="popup-badge-night">🌙深夜営業</span>' : '';
+    return `${escapeHtml(hoursStr)}${badge}`;
+}
+
+function renderParking(parkingStr) {
+    if (!parkingStr) return '<span class="popup-muted">情報なし</span>';
+    if (/なし/.test(parkingStr)) return `<span class="popup-parking-no">❌ なし</span>`;
+    if (/あり/.test(parkingStr)) return `<span class="popup-parking-yes">✅ ${escapeHtml(parkingStr)}</span>`;
+    return escapeHtml(parkingStr);
+}
+
+// ===================================================================
+// レビュー機能（LocalStorage保存）
+// ===================================================================
+function reviewStorageKey(name) {
+    return `ramenMapReview:${name}`;
+}
+
+function loadReview(name) {
+    try {
+        const raw = localStorage.getItem(reviewStorageKey(name));
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveReview(name, rating, comment) {
+    try {
+        localStorage.setItem(reviewStorageKey(name), JSON.stringify({ rating, comment, savedAt: Date.now() }));
+    } catch (e) {
+        console.warn('[ラーメンマップ] レビューの保存に失敗しました:', e.message);
+    }
+}
+
+function buildReviewViewHtml(shop) {
+    const stars = [1, 2, 3, 4, 5].map(n => `<span class="popup-star" data-value="${n}">☆</span>`).join('');
+    return `
+        <div class="popup-review-title">📝 ${escapeHtml(shop.name)} のレビュー</div>
+        <div class="popup-review-existing"></div>
+        <div class="popup-star-row">${stars}</div>
+        <textarea class="popup-review-comment" rows="3" placeholder="コメントを入力してください..."></textarea>
+        <div class="popup-review-actions">
+            <button type="button" class="popup-btn popup-btn-orange popup-review-submit">送信</button>
+            <button type="button" class="popup-btn popup-btn-grey popup-review-back">戻る</button>
+        </div>
+    `;
+}
+
+function wireUpReviewEvents(root, shop) {
+    const infoView   = root.querySelector('.popup-info-view');
+    const reviewView = root.querySelector('.popup-review-view');
+    const toggleBtn  = root.querySelector('.popup-review-toggle');
+    const backBtn    = root.querySelector('.popup-review-back');
+    const submitBtn  = root.querySelector('.popup-review-submit');
+    const commentEl  = root.querySelector('.popup-review-comment');
+    const existingEl = root.querySelector('.popup-review-existing');
+    const starEls    = root.querySelectorAll('.popup-star');
+
+    let selectedRating = 0;
+
+    function renderStars() {
+        starEls.forEach(star => {
+            const v = Number(star.dataset.value);
+            star.textContent = v <= selectedRating ? '★' : '☆';
+        });
+    }
+
+    function refreshReviewView() {
+        const saved = loadReview(shop.name);
+        if (saved) {
+            selectedRating = saved.rating;
+            commentEl.value = saved.comment || '';
+            const savedDate = new Date(saved.savedAt).toLocaleDateString('ja-JP');
+            existingEl.innerHTML =
+                `前回の投稿（${savedDate}）：${'★'.repeat(saved.rating)}${'☆'.repeat(5 - saved.rating)}<br>${escapeHtml(saved.comment || '（コメントなし）')}`;
+        } else {
+            selectedRating = 0;
+            commentEl.value = '';
+            existingEl.innerHTML = 'まだレビューが投稿されていません。';
+        }
+        renderStars();
+    }
+
+    starEls.forEach(star => {
+        star.addEventListener('click', () => {
+            selectedRating = Number(star.dataset.value);
+            renderStars();
+        });
+    });
+
+    toggleBtn.addEventListener('click', () => {
+        infoView.style.display = 'none';
+        reviewView.style.display = 'block';
+        refreshReviewView();
+    });
+
+    backBtn.addEventListener('click', () => {
+        reviewView.style.display = 'none';
+        infoView.style.display = 'block';
+    });
+
+    submitBtn.addEventListener('click', () => {
+        if (selectedRating === 0) {
+            alert('星評価を選択してください。');
+            return;
+        }
+        saveReview(shop.name, selectedRating, commentEl.value.trim());
+        refreshReviewView();
+    });
+}
+
+// 駅用のポップアップ（駅名とGoogleマップ経路検索のみ）
+function buildStationPopupElement(shop) {
+    const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
+    const root = document.createElement('div');
+    root.className = 'popup-card';
+    root.innerHTML = `
+        <div class="popup-title popup-station-title">${escapeHtml(shop.name)}</div>
+        <div class="popup-actions">
+            <a href="${gmapsUrl}" target="_blank" class="popup-btn popup-btn-green">🗺️ Google Mapで経路を検索</a>
+        </div>
+    `;
+    return root;
+}
+
+// 全カテゴリ共通のリッチなポップアップカードを組み立てる（駅は簡易版に分岐）
+function buildRichPopupElement(shop) {
+    if (shop.category === '駅') return buildStationPopupElement(shop);
+
+    const gmapsUrl  = `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lon}`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(shop.name + ' ラーメン')}`;
+    const imageHtml = shop.imageUrl
+        ? `<img src="${escapeHtml(shop.imageUrl)}" alt="${escapeHtml(shop.name)}" class="popup-photo" onerror="this.style.display='none';">`
+        : '';
+
+    const root = document.createElement('div');
+    root.className = 'popup-card';
+    root.innerHTML = `
+        <div class="popup-info-view">
+            ${imageHtml}
+            <div class="popup-header">
+                <div class="popup-title">${escapeHtml(shop.name)}</div>
+                <span class="popup-category-badge">${escapeHtml(shop.category)}</span>
+            </div>
+            <div class="popup-field"><b>📍 住所:</b> ${shop.address ? escapeHtml(shop.address) : '<span class="popup-muted">情報なし</span>'}</div>
+            <div class="popup-field"><b>🕒 営業時間:</b> ${renderOpeningHours(shop.openingHours)}</div>
+            ${buildStatusBoxHtml(shop.openingHours)}
+            <div class="popup-parking-box"><b>🚗 駐車場:</b> ${renderParking(shop.parking)}</div>
+            <div class="popup-actions">
+                <a href="${gmapsUrl}" target="_blank" class="popup-btn popup-btn-green">🗺️ Google Mapで経路を検索</a>
+                <a href="${searchUrl}" target="_blank" class="popup-btn popup-btn-blue">🔍 詳細を検索</a>
+                <button type="button" class="popup-btn popup-btn-orange popup-review-toggle">📝 レビューを書く / 見る</button>
+            </div>
+        </div>
+        <div class="popup-review-view" style="display:none;">
+            ${buildReviewViewHtml(shop)}
+        </div>
+    `;
+
+    wireUpReviewEvents(root, shop);
+    return root;
 }
 
 // ===================================================================
@@ -277,10 +456,13 @@ roadDefs.forEach(road => { road.layer = L.layerGroup().addTo(map); });
 
 // ===================================================================
 // 駅500m圏サークル（道路ラインより先に追加して視覚的に下に配置）
+// スプレッドシートの category="駅" データ取得後に buildStationCircles() で構築する
 // ===================================================================
 const stationCirclesLayer = L.layerGroup().addTo(map);
-if (typeof stations !== 'undefined') {
-    stations.forEach(st => {
+
+function buildStationCircles(stationShops) {
+    stationCirclesLayer.clearLayers();
+    stationShops.forEach(st => {
         L.circle([st.lat, st.lon], {
             radius: 500,
             color: '#27ae60',
@@ -309,24 +491,18 @@ if (typeof stations !== 'undefined') {
 })();
 
 // ===================================================================
-// 駅レイヤー & 駅一覧パネル
+// 駅一覧パネル
+// スプレッドシートの category="駅" 行を駅として扱う（駅レイヤー自体は
+// カテゴリ別クラスターの一つとして initShopData 内で構築される）
 // ===================================================================
-const stationsLayerGroup = L.layerGroup().addTo(map);
-const stationMarkerMap = {};  // name → marker（パネルクリック時のポップアップ用）
-
-if (typeof stations !== 'undefined') {
-    stations.forEach(st => {
-        const marker = L.marker([st.lat, st.lon], { icon: stationIcon })
-            .bindPopup(`<b>🚉 ${st.name}駅</b>`)
-            .addTo(stationsLayerGroup);
-        stationMarkerMap[st.name] = marker;
-    });
-}
+const stationMarkerMap = new Map();  // 駅名 → marker（パネルクリック時のポップアップ用）
 
 // 駅一覧サイドバーのリストを動的に生成（周辺ラーメン店数の多い順）
-(function buildStationList() {
+// スプレッドシートからの店舗データ取得完了後に shops を渡して呼び出す
+function buildStationList(shops) {
     const body = document.getElementById('stationListBody');
-    if (!body || typeof stations === 'undefined') return;
+    if (!body) return;
+    body.innerHTML = '';
 
     function distKm(lat1, lon1, lat2, lon2) {
         const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
@@ -335,27 +511,28 @@ if (typeof stations !== 'undefined') {
     }
 
     const RADIUS_KM = 1.5;
-    const shops = typeof ramenShops !== 'undefined' ? ramenShops : [];
+    const stationShops = shops.filter(s => s.category === '駅');
+    const ramenShops    = shops.filter(s => s.category !== '駅');
 
-    const sorted = [...stations].sort((a, b) => {
-        const countA = shops.filter(s => distKm(a.lat, a.lon, s.lat, s.lon) <= RADIUS_KM).length;
-        const countB = shops.filter(s => distKm(b.lat, b.lon, s.lat, s.lon) <= RADIUS_KM).length;
+    const sorted = [...stationShops].sort((a, b) => {
+        const countA = ramenShops.filter(s => distKm(a.lat, a.lon, s.lat, s.lon) <= RADIUS_KM).length;
+        const countB = ramenShops.filter(s => distKm(b.lat, b.lon, s.lat, s.lon) <= RADIUS_KM).length;
         return countB - countA;
     });
 
     sorted.forEach(st => {
         const item = document.createElement('div');
         item.className = 'station-list-item';
-        item.textContent = `🚉 ${st.name}駅`;
+        item.textContent = `🚉 ${st.name}`;
         item.addEventListener('click', () => {
             closeSidebar();
             map.flyTo([st.lat, st.lon], 15, { duration: 1.0 });
-            const marker = stationMarkerMap[st.name];
+            const marker = stationMarkerMap.get(st.name);
             if (marker) setTimeout(() => marker.openPopup(), 1100);
         });
         body.appendChild(item);
     });
-})();
+}
 
 // 駅一覧サイドバーの開閉制御
 function openSidebar() {
@@ -416,12 +593,7 @@ function initUserPosition(lat, lng, accuracy) {
 }
 
 // ===================================================================
-// アイコン追加（個人店用：青）
-// ===================================================================
-const blueIcon = createIcon('blue');
-
-// ===================================================================
-// ラーメン店マーカー（クラスター + クリック時ズームイン）
+// ラーメン店マーカー（カテゴリ別クラスター + クリック時ズームイン）
 // ===================================================================
 function makeClusterOptions(theme) {
     const prefix = theme === 'chain' ? 'chain-' : '';
@@ -444,29 +616,105 @@ function makeClusterOptions(theme) {
     };
 }
 
-const chainCluster      = L.markerClusterGroup(makeClusterOptions('chain'));
-const individualCluster = L.markerClusterGroup(makeClusterOptions());
+// カテゴリ名 → { cluster, color } を保持する（登場順にフォールバック色を割り当てる）
+const categoryClusters = new Map();
 
-if (typeof ramenShops !== 'undefined') {
-    ramenShops.forEach(shop => {
-        const isChain = typeof chainKeywords !== 'undefined' &&
-                        chainKeywords.some(kw => shop.name.includes(kw));
-        const icon    = isChain ? redIcon : blueIcon;
-        const cluster = isChain ? chainCluster : individualCluster;
+function getOrCreateCategoryCluster(category) {
+    if (categoryClusters.has(category)) return categoryClusters.get(category);
 
-        const marker = L.marker([shop.lat, shop.lon], { icon })
-            .bindPopup(buildPopupContent(shop, isChain));
+    const usedColors = new Set([...categoryClusters.values()].map(v => v.color));
+    const color = CATEGORY_PRESET_COLORS[category] ||
+        CATEGORY_FALLBACK_COLORS.find(c => !usedColors.has(c)) || 'grey';
+    const theme = category === 'チェーン店' ? 'chain' : '';
+
+    // 駅はクラスター化せず、常に個々のピンをそのまま表示する
+    const layer = category === '駅'
+        ? L.layerGroup()
+        : L.markerClusterGroup(makeClusterOptions(theme));
+
+    const entry = { cluster: layer, color };
+    categoryClusters.set(category, entry);
+    return entry;
+}
+
+function setCategoryVisible(category, checked) {
+    const entry = categoryClusters.get(category);
+    if (!entry) return;
+    checked ? entry.cluster.addTo(map) : map.removeLayer(entry.cluster);
+}
+
+// カテゴリ名 → そのカテゴリのチェックボックス群（凡例・表示切り替えパネルの両方に存在するため同期させる）
+const categoryCheckboxes = new Map();
+
+function registerCategoryCheckbox(category, input) {
+    if (!categoryCheckboxes.has(category)) categoryCheckboxes.set(category, new Set());
+    categoryCheckboxes.get(category).add(input);
+    input.addEventListener('change', function() {
+        setCategoryVisible(category, this.checked);
+        categoryCheckboxes.get(category).forEach(cb => { if (cb !== this) cb.checked = this.checked; });
+    });
+}
+
+function buildCategoryToggleItem(itemClass, pinClass, category, color) {
+    const label = document.createElement('label');
+    label.className = itemClass;
+    label.innerHTML = `
+        <input type="checkbox" checked>
+        <img class="${pinClass}" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png">
+        <span style="font-size:12px; color:#333;">${escapeHtml(category)}</span>
+    `;
+    registerCategoryCheckbox(category, label.querySelector('input'));
+    return label;
+}
+
+// 凡例（右下）と表示切り替えパネル（左）の両方にカテゴリごとのチェックボックスを生成する
+function buildCategoryLegend() {
+    const legendContainer = document.getElementById('legendCategoryItems');
+    const filterContainer = document.getElementById('filterCategoryItems');
+    if (legendContainer) legendContainer.innerHTML = '';
+    if (filterContainer) filterContainer.innerHTML = '';
+    categoryCheckboxes.clear();
+
+    categoryClusters.forEach(({ color }, category) => {
+        if (legendContainer) {
+            legendContainer.appendChild(buildCategoryToggleItem('legend-item legend-item-cb', 'legend-pin', category, color));
+        }
+        if (filterContainer) {
+            filterContainer.appendChild(buildCategoryToggleItem('filter-item', 'filter-pin', category, color));
+        }
+    });
+}
+
+// スプレッドシートからデータを取得し、マーカー・凡例・駅一覧を構築する
+(async function initShopData() {
+    let shops = [];
+    try {
+        shops = await loadShopsFromSheet();
+    } catch (e) {
+        console.error('[ラーメンマップ] スプレッドシートの取得に失敗しました:', e);
+        showDataError();
+    }
+
+    shops.forEach(shop => {
+        const { cluster, color } = getOrCreateCategoryCluster(shop.category);
+        const marker = L.marker([shop.lat, shop.lon], { icon: getIcon(color) });
+
+        // 関数を渡すことで、ポップアップを開くたびに最新のレビュー内容を反映する
+        marker.bindPopup(() => buildRichPopupElement(shop));
 
         marker.on('click', function() {
             map.flyTo([shop.lat, shop.lon], Math.max(map.getZoom(), 16), { duration: 0.7 });
         });
 
         cluster.addLayer(marker);
+        if (shop.category === '駅') stationMarkerMap.set(shop.name, marker);
     });
 
-    chainCluster.addTo(map);
-    individualCluster.addTo(map);
-}
+    categoryClusters.forEach(({ cluster }) => cluster.addTo(map));
+    buildCategoryLegend();
+    buildStationCircles(shops.filter(s => s.category === '駅'));
+    buildStationList(shops);
+})();
 
 // ===================================================================
 // フィルターコントロール（タイトル・駅一覧タブのすぐ下に配置）
@@ -486,22 +734,9 @@ function buildFilterPanel() {
 
     container.innerHTML = `
         <div class="filter-title">表示切り替え</div>
-        <label class="filter-item">
-            <input type="checkbox" id="chainFilter" checked>
-            <img class="filter-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png">
-            <span>チェーン店</span>
-        </label>
-        <label class="filter-item">
-            <input type="checkbox" id="individualFilter" checked>
-            <img class="filter-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png">
-            <span>個人店</span>
-        </label>
-        <div class="filter-divider"></div>
-        <label class="filter-item">
-            <input type="checkbox" id="stationFilter" checked>
-            <img class="filter-pin" src="${_GREY_PIN_URL}">
-            <span>駅</span>
-        </label>
+        <div id="filterCategoryItems">
+            <div class="filter-item" style="color:#999;">カテゴリ読み込み中...</div>
+        </div>
         <div class="filter-divider"></div>
         <div class="filter-roads-header">
             <label class="filter-item" style="margin:0;flex:1;">
@@ -515,17 +750,6 @@ function buildFilterPanel() {
             ${roadSubHtml}
         </div>
     `;
-
-    container.querySelector('#stationFilter').addEventListener('change', function() {
-        this.checked ? stationsLayerGroup.addTo(map) : map.removeLayer(stationsLayerGroup);
-    });
-
-    container.querySelector('#chainFilter').addEventListener('change', function() {
-        setChainVisible(this.checked);
-    });
-    container.querySelector('#individualFilter').addEventListener('change', function() {
-        setIndividualVisible(this.checked);
-    });
 
     const masterCb = container.querySelector('#roadsFilter');
     masterCb.addEventListener('change', function() {
@@ -634,25 +858,10 @@ window.addEventListener('resize', layoutLeftStack);
 })();
 
 // ===================================================================
-// チェーン店 / 個人店フィルター（表示切り替えパネルから操作）
-// ===================================================================
-function setChainVisible(checked) {
-    checked ? chainCluster.addTo(map) : map.removeLayer(chainCluster);
-    const cb = document.getElementById('chainFilter');
-    if (cb) cb.checked = checked;
-}
-function setIndividualVisible(checked) {
-    checked ? individualCluster.addTo(map) : map.removeLayer(individualCluster);
-    const cb = document.getElementById('individualFilter');
-    if (cb) cb.checked = checked;
-}
-
-// ===================================================================
 // About モーダル
 // ===================================================================
 (function() {
     const overlay   = document.getElementById('aboutModal');
-    const container = document.getElementById('aboutModalContainer');
     const openBtn   = document.getElementById('about-btn');
     const closeBtn  = document.getElementById('modalCloseBtn');
 

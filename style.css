@@ -507,6 +507,16 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     margin: 0;
 }
 
+.modal-feature-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.9;
+}
+
+.modal-feature-list li { margin-bottom: 4px; }
+
 /* ===================================================================
    メンバーカード（Gridレイアウト）
    =================================================================== */
@@ -601,6 +611,203 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .locate-btn:active { background-color: #dce8ff; }
 
 /* ===================================================================
+   ポップアップ（グルメアプリ風カードUI）
+   Leaflet標準のラッパー余白・影を無効化し、popup-card 側で完結させる
+   =================================================================== */
+.leaflet-popup-content-wrapper {
+    padding: 0;
+    box-shadow: none;
+    border-radius: 14px;
+}
+.leaflet-popup-content {
+    margin: 0;
+    width: auto !important;
+}
+
+.popup-card {
+    font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+    width: 280px;
+    max-width: 320px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.22);
+    padding: 14px 16px 16px;
+    box-sizing: border-box;
+}
+
+.popup-photo {
+    width: calc(100% + 32px);
+    margin: -14px -16px 10px;
+    height: 140px;
+    object-fit: cover;
+    display: block;
+    border-radius: 14px 14px 0 0;
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    border-bottom: 2px solid #e74c3c;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+.popup-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+    line-height: 1.3;
+    flex: 1;
+}
+
+.popup-station-title {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e74c3c;
+}
+
+.popup-category-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1.5px solid #e74c3c;
+    color: #e74c3c;
+    background: #fff5f5;
+    white-space: nowrap;
+    align-self: center;
+}
+
+.popup-field {
+    margin: 6px 0;
+    font-size: 12.5px;
+    color: #333;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.popup-muted { color: #aaa; }
+
+.popup-badge-night {
+    display: inline-block;
+    background: #c0392b;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.popup-status-box {
+    margin: 8px 0;
+    padding: 7px 10px;
+    border-radius: 6px;
+    line-height: 1.6;
+}
+.popup-status-text { font-size: 13px; font-weight: 700; }
+.popup-status-sub  { font-size: 11px; color: #555; }
+
+.popup-parking-box {
+    margin: 8px 0;
+    font-size: 12.5px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #f4f5f6;
+    color: #333;
+}
+.popup-parking-yes { color: #218c4a; font-weight: 700; }
+.popup-parking-no  { color: #e74c3c; font-weight: 700; }
+
+.popup-actions {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.popup-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 9px 6px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: filter 0.12s;
+}
+
+/* Leafletの `.leaflet-popup-content a` 既定色（#0078A8）より詳細度を上げて白を強制する */
+.leaflet-popup-content a.popup-btn,
+.leaflet-popup-content a.popup-btn:visited,
+.leaflet-popup-content a.popup-btn:hover,
+.leaflet-popup-content a.popup-btn:active {
+    color: #fff;
+}
+.popup-btn:hover    { filter: brightness(0.94); }
+.popup-btn-green    { background: #34A853; }
+.popup-btn-blue     { background: #4285F4; }
+.popup-btn-orange   { background: #f39c12; }
+.popup-btn-grey     { background: #95a5a6; }
+
+.popup-review-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #222;
+    margin-bottom: 8px;
+}
+
+.popup-review-existing {
+    font-size: 11.5px;
+    color: #666;
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    line-height: 1.6;
+}
+
+.popup-star-row {
+    font-size: 24px;
+    letter-spacing: 4px;
+    margin-bottom: 10px;
+    color: #f1c40f;
+    user-select: none;
+}
+.popup-star      { cursor: pointer; display: inline-block; transition: transform 0.1s; }
+.popup-star:hover { transform: scale(1.15); }
+
+.popup-review-comment {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 10px;
+}
+
+.popup-review-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+/* ===================================================================
    スマートフォン対応（〜 600px）
    =================================================================== */
 @media (max-width: 600px) {
@@ -653,22 +860,15 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     .leaflet-popup-content-wrapper { max-width: calc(100vw - 50px) !important; }
 
     .leaflet-popup-content {
-        margin: 10px 12px !important;
-        max-width: calc(100vw - 80px) !important;
+        margin: 0 !important;
+        max-width: calc(100vw - 50px) !important;
         overflow-wrap: break-word;
         word-break: break-word;
     }
 
-    .leaflet-popup-content > div  { min-width: auto !important; max-width: 100% !important; }
-    .leaflet-popup-content h3     { font-size: 13px !important; }
-    .leaflet-popup-content p      { font-size: 11px !important; }
-
-    .leaflet-popup-content a[target="_blank"] {
-        padding: 8px 14px !important;
-        font-size: 11px !important;
-        display: block !important;
-        text-align: center;
-    }
+    .popup-card  { width: auto; max-width: 100%; }
+    .popup-title { font-size: 14px; }
+    .popup-field { font-size: 11.5px; }
 
     /* --- 現在地ボタン --- */
     .locate-btn { width: 36px; height: 36px; }
