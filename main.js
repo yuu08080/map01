@@ -785,30 +785,16 @@ function buildStationCircles(stationShops) {
 // ===================================================================
 const stationMarkerMap = new Map();  // 駅名 → marker（パネルクリック時のポップアップ用）
 
-// 駅一覧サイドバーのリストを動的に生成（周辺ラーメン店数の多い順）
+// 駅一覧サイドバーのリストを動的に生成（スプレッドシートの行順のまま）
 // スプレッドシートからの店舗データ取得完了後に shops を渡して呼び出す
 function buildStationList(shops) {
     const body = document.getElementById('stationListBody');
     if (!body) return;
     body.innerHTML = '';
 
-    function distKm(lat1, lon1, lat2, lon2) {
-        const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    const RADIUS_KM = 1.5;
     const stationShops = shops.filter(s => s.category === '駅');
-    const ramenShops    = shops.filter(s => s.category !== '駅');
 
-    const sorted = [...stationShops].sort((a, b) => {
-        const countA = ramenShops.filter(s => distKm(a.lat, a.lon, s.lat, s.lon) <= RADIUS_KM).length;
-        const countB = ramenShops.filter(s => distKm(b.lat, b.lon, s.lat, s.lon) <= RADIUS_KM).length;
-        return countB - countA;
-    });
-
-    sorted.forEach(st => {
+    stationShops.forEach(st => {
         const item = document.createElement('div');
         item.className = 'station-list-item';
         item.textContent = `🚉 ${st.name}`;
