@@ -110,8 +110,8 @@ function parseCSV(text) {
     return rows.filter(r => r.some(cell => cell.trim() !== ''));
 }
 
-// スプレッドシートのCSVを取得し、店舗オブジェクトの配列に変換する
-async function loadShopsFromSheet() {
+// スプレッドシートのCSVを1回だけ取得し、店舗オブジェクトの配列に変換する
+async function fetchShopsFromSheetOnce() {
     const res = await fetch(SHEET_CSV_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
@@ -134,6 +134,25 @@ async function loadShopsFromSheet() {
             imageUrl: rec.image_url || rec.imageurl || rec.image || ''
         };
     }).filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon) && s.name);
+}
+
+// スプレッドシートのCSVを取得する。Googleの「ウェブに公開」CSVエンドポイントは
+// 本番運用を想定しておらず、一時的に503（Service Unavailable）を返すことがあるため、
+// 失敗時は間隔を空けて数回リトライしてから諦める。
+async function loadShopsFromSheet(retries = 3, delayMs = 800) {
+    let lastError;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await fetchShopsFromSheetOnce();
+        } catch (e) {
+            lastError = e;
+            if (attempt < retries) {
+                console.warn(`[ラーメンマップ] スプレッドシート取得に失敗（${attempt}/${retries}回目）。再試行します:`, e.message);
+                await new Promise(r => setTimeout(r, delayMs * attempt));
+            }
+        }
+    }
+    throw lastError;
 }
 
 // データ取得に失敗した場合の通知バナー
