@@ -58,23 +58,13 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 
 .legend-item  { display: flex; align-items: center; margin: 5px 0; gap: 7px; }
-.legend-pin   { width: 13px; height: 21px; object-fit: contain; flex-shrink: 0; }
+.legend-emoji { width: 20px; font-size: 15px; line-height: 1; text-align: center; flex-shrink: 0; }
 .legend-line  { width: 28px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 
 /* 凡例内セパレーター */
 .legend-divider-thin {
     border-top: 1px solid #e5e5e5;
     margin: 6px 0;
-}
-
-/* 駅500m圏 凡例アイコン */
-.legend-circle-icon {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 1.5px solid rgba(39,174,96,0.55);
-    background: rgba(39,174,96,0.12);
-    flex-shrink: 0;
 }
 
 /* 凡例：駅（グレー円） */
@@ -89,84 +79,57 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 
 /* ===================================================================
-   駅一覧トグルボタン（タイトル枠のすぐ下・top は JS で算出）
+   駅一覧（タイトル枠のすぐ下・凡例と同じ折りたたみ式のドロップダウン）
    =================================================================== */
-.station-toggle-btn {
+.station-list-wrapper {
     position: absolute;
-    left: 0;
+    left: 20px;
     z-index: 500;
-    background: #2980b9;
-    color: white;
+}
+
+.station-toggle-btn {
+    display: block;
+    background: rgba(255,255,255,0.93);
     border: none;
-    border-radius: 0 8px 8px 0;
-    padding: 10px 16px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 13px;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
     font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.20);
+    backdrop-filter: blur(4px);
     white-space: nowrap;
-    box-shadow: 3px 2px 10px rgba(0,0,0,0.25);
-    transition: background 0.15s, padding 0.15s;
-    line-height: 1;
-}
-
-.station-toggle-btn:hover { background: #1a6dad; padding-left: 20px; }
-
-/* ===================================================================
-   駅一覧サイドバー（右から出現）
-   =================================================================== */
-.station-sidebar {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 230px;
-    height: 100dvh;
-    background: white;
-    z-index: 1100;
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    box-shadow: -4px 0 20px rgba(0,0,0,0.25);
-}
-
-.station-sidebar.open { transform: translateX(0); }
-
-.station-sidebar-header {
-    background: #2980b9;
-    color: white;
-    padding: 14px 16px;
-    font-size: 14px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-}
-
-.station-sidebar-close {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 0 2px;
-    line-height: 1;
-    opacity: 0.8;
-    transition: opacity 0.15s;
     font-family: inherit;
+    transition: background 0.15s;
 }
 
-.station-sidebar-close:hover { opacity: 1; }
+.station-toggle-btn:hover { background: #f0f4ff; }
 
-.station-sidebar-body {
+.station-list-body {
+    background: rgba(255,255,255,0.93);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.20);
+    backdrop-filter: blur(4px);
+    margin-top: 6px;
     overflow-y: auto;
-    flex: 1;
+    max-height: 0;
+    width: 230px;
+    max-width: calc(100vw - 40px);
+    opacity: 0;
+    pointer-events: none;
     -webkit-overflow-scrolling: touch;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.station-list-body.open {
+    max-height: min(50vh, 320px);
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .station-list-item {
-    padding: 13px 18px;
+    padding: 11px 16px;
     font-size: 13px;
     cursor: pointer;
     border-bottom: 1px solid #f0f0f0;
@@ -182,24 +145,111 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .station-list-item:active { background: #cce5f7; }
 .station-list-item:last-child { border-bottom: none; }
 
-
-/* サイドバー背景オーバーレイ */
-.station-sidebar-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100dvh;
-    background: rgba(0,0,0,0.35);
-    z-index: 1090;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
+/* ===================================================================
+   表示切り替え（右上・「ピンをクリア」ボタンのすぐ下／折りたたみ式）
+   =================================================================== */
+.display-filter-wrapper {
+    position: absolute;
+    top: 154px;
+    right: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
-.station-sidebar-overlay.open {
+.display-filter-toggle-btn {
+    display: block;
+    background: rgba(255,255,255,0.93);
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.20);
+    backdrop-filter: blur(4px);
+    white-space: nowrap;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+
+.display-filter-toggle-btn:hover { background: #f0f4ff; }
+
+.display-filter-body {
+    background: rgba(255,255,255,0.93);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.20);
+    backdrop-filter: blur(4px);
+    margin-top: 6px;
+    overflow-y: auto;
+    max-height: 0;
+    width: 250px;
+    max-width: calc(100vw - 20px);
+    padding: 0 14px;
+    opacity: 0;
+    pointer-events: none;
+    -webkit-overflow-scrolling: touch;
+    transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+}
+
+.display-filter-body.open {
+    max-height: min(60vh, 420px);
+    padding: 12px 14px;
     opacity: 1;
     pointer-events: auto;
+}
+
+.display-filter-group-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: #888;
+    margin: 6px 0 4px;
+}
+
+.display-filter-group:first-child .display-filter-group-label { margin-top: 0; }
+
+.display-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    color: #333;
+    padding: 5px 0;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.display-filter-item input[type="checkbox"] { cursor: pointer; }
+
+.display-filter-divider {
+    border-top: 1px solid #e5e5e5;
+    margin: 6px 0;
+}
+
+/* ピン刺しモード中：パネル全体をグレーアウトし、チェックボックス操作を禁止する。
+   ただし地図表示系（駅500m圏内の円など）は店舗絞り込みと無関係なので対象外にする */
+.display-filter-body.disabled .display-filter-group:not(.display-filter-group--always-enabled) {
+    opacity: 0.45;
+    filter: grayscale(0.4);
+}
+
+.display-filter-body.disabled .display-filter-group:not(.display-filter-group--always-enabled) .display-filter-item,
+.display-filter-item input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
+.display-filter-notice {
+    background: #fff4e0;
+    border: 1px solid #f3c98b;
+    border-radius: 6px;
+    color: #a15c00;
+    font-size: 11.5px;
+    font-weight: bold;
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    line-height: 1.4;
 }
 
 /* ===================================================================
@@ -223,108 +273,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .update-date    { font-size: 10px; color: #bbb; margin-top: 5px; }
 
 /* ===================================================================
-   フィルターコントロール（駅一覧タブのすぐ下・top は JS で算出）
-   =================================================================== */
-.filter-panel {
-    position: absolute;
-    left: 20px;
-    z-index: 400;
-    background: rgba(255,255,255,0.93);
-    padding: 10px 14px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.20);
-    backdrop-filter: blur(4px);
-    min-width: 130px;
-}
-
-.filter-title {
-    font-size: 12px;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #ddd;
-}
-
-.filter-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    margin: 5px 0;
-    font-size: 12px;
-    color: #333;
-}
-
-.filter-item input[type="checkbox"] {
-    cursor: pointer;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-}
-
-.filter-pin  { width: 10px; height: 16px; object-fit: contain; flex-shrink: 0; }
-
-.filter-divider { border-top: 1px solid #e0e0e0; margin: 7px 0; }
-
-/* フィルター：駅ドット */
-.filter-station-dot {
-    width: 10px;
-    height: 10px;
-    background: #999;
-    border: 1.5px solid #fff;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1px #aaa;
-    flex-shrink: 0;
-}
-
-/* フィルター：道路ライン */
-.filter-road-line-icon {
-    width: 22px;
-    height: 3px;
-    background: #888;
-    border-radius: 2px;
-    flex-shrink: 0;
-}
-
-/* フィルター：国道・街道ヘッダー行 */
-.filter-roads-header {
-    display: flex;
-    align-items: center;
-    margin: 5px 0 0;
-}
-
-/* フィルター：個別切替ボタン（▶ / ▼） */
-.filter-roads-toggle {
-    background: none;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 9px;
-    line-height: 1.6;
-    cursor: pointer;
-    color: #666;
-    font-family: inherit;
-    flex-shrink: 0;
-    transition: background 0.12s;
-}
-.filter-roads-toggle:hover { background: #f0f0f0; }
-
-/* フィルター：折りたたみサブパネル */
-.filter-roads-sub {
-    overflow: hidden;
-    max-height: 0;
-    transition: max-height 0.25s ease, padding 0.25s ease;
-    padding-left: 12px;
-    border-left: 2px solid #eee;
-    margin-left: 7px;
-}
-.filter-roads-sub.open { max-height: 160px; padding-bottom: 2px; }
-
-/* フィルター：サブパネル内アイテム */
-.filter-sub-item { font-size: 11px !important; margin: 4px 0 !important; }
-
-/* ===================================================================
    駅マーカー（地図上）
    =================================================================== */
 .station-marker-pin {
@@ -334,37 +282,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     border: 2.5px solid #fff;
     border-radius: 50%;
     box-shadow: 0 1px 4px rgba(0,0,0,0.32);
-}
-
-/* ===================================================================
-   クラスターアイコン（密度で色分け：青→黄→赤）
-   =================================================================== */
-.marker-cluster-custom {
-    border-radius: 50%;
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    border: 3px solid transparent;
-}
-
-/* 低密度（< 5件）：淡オレンジ */
-.cluster-low  { background: rgba(245,175,100,0.88); border-color: rgba(200,130,50,0.95); }
-/* 中密度（5〜19件）：中オレンジ */
-.cluster-mid  { background: rgba(228,120,30,0.90);  border-color: rgba(180,90,15,0.95); }
-/* 高密度（20件以上）：濃いバーントオレンジ */
-.cluster-high { background: rgba(185,60,10,0.92);   border-color: rgba(140,40,5,0.98); }
-
-/* チェーン店クラスター（青系） */
-.cluster-chain-low  { background: rgba(80,155,240,0.88); border-color: rgba(40,110,195,0.95); }
-.cluster-chain-mid  { background: rgba(40,120,220,0.90); border-color: rgba(15, 80,175,0.95); }
-.cluster-chain-high { background: rgba(10, 75,170,0.92); border-color: rgba(5,  45,130,0.98); }
-
-.cluster-inner {
-    font-size: 13px;
-    font-weight: bold;
-    color: #fff;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.45);
-    line-height: 1;
 }
 
 /* ===================================================================
@@ -465,6 +382,74 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 
 .admin-password-submit-btn { width: 100%; }
+
+/* ===================================================================
+   検索エリア選択モーダル（初期表示・必須／×ボタンや背景クリックでは閉じない）
+   =================================================================== */
+#areaSelectModal { z-index: 2200; }
+
+.area-select-container {
+    max-width: 380px;
+    text-align: center;
+}
+
+.area-select-title { padding-right: 0; text-align: center; }
+
+.area-select-current-btn { margin-top: 4px; }
+
+.area-select-status {
+    min-height: 16px;
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    color: #e67e22;
+    line-height: 1.5;
+}
+
+.area-select-divider {
+    display: flex;
+    align-items: center;
+    margin: 18px 0;
+    color: #aaa;
+    font-size: 11px;
+}
+.area-select-divider::before,
+.area-select-divider::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid #eee;
+}
+.area-select-divider span { padding: 0 10px; }
+
+.area-select-station-row {
+    display: flex;
+    gap: 8px;
+}
+
+.area-select-select {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 9px 8px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #333;
+    background: #fff;
+}
+.area-select-select:disabled { color: #999; background: #f5f5f5; }
+
+/* .popup-btn の width:100% (このファイル内で後に定義されており詳細度が同じため
+   上書きしてしまう) に打ち勝つよう、あえて詳細度を上げている */
+.area-select-station-row .area-select-confirm-btn {
+    width: auto;
+    flex-shrink: 0;
+    padding: 9px 14px;
+}
+.area-select-station-row .area-select-confirm-btn:disabled {
+    background: #bbb;
+    cursor: not-allowed;
+}
 
 /* ===================================================================
    About ボタン（右上・locate-btn のさらに左 6px）
@@ -592,16 +577,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     margin: 0;
 }
 
-.modal-feature-list {
-    margin: 0;
-    padding-left: 20px;
-    font-size: 13px;
-    color: #444;
-    line-height: 1.9;
-}
-
-.modal-feature-list li { margin-bottom: 4px; }
-
 /* ===================================================================
    メンバーカード（Gridレイアウト）
    =================================================================== */
@@ -696,6 +671,118 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .locate-btn:active { background-color: #dce8ff; }
 
 /* ===================================================================
+   ピン刺し再検索モード トグルボタン（右上・ズームボタンの下）
+   =================================================================== */
+.pin-drop-btn {
+    position: absolute;
+    top: 78px;
+    right: 10px;
+    z-index: 1000;
+    height: 30px;
+    padding: 0 10px;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    gap: 4px;
+}
+
+.pin-drop-btn:hover { background-color: #f0f4ff; color: #2979FF; }
+
+.pin-drop-btn.active {
+    background-color: #f39c12;
+    border-color: #e67e22;
+    color: #fff;
+}
+.pin-drop-btn.active:hover { background-color: #e67e22; color: #fff; }
+
+/* ===================================================================
+   ピンをクリア（ピン刺しトグルのすぐ下・ピン刺しモード中のみ有効）
+   =================================================================== */
+.pin-clear-btn {
+    position: absolute;
+    top: 116px;
+    right: 10px;
+    z-index: 1000;
+    height: 30px;
+    padding: 0 10px;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: #555;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.pin-clear-btn:hover { background-color: #fdecea; color: #c0392b; border-color: #e74c3c; }
+
+.pin-clear-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background-color: white;
+    color: #555;
+}
+
+/* 検索中心ピン（現在地以外の中心を示すマーカー。絵文字をそのままアイコンにする）
+   Leafletの .leaflet-div-icon 既定スタイル（白背景・枠線）を打ち消す */
+.search-center-pin {
+    background: transparent !important;
+    border: none !important;
+    font-size: 28px;
+    line-height: 1;
+    text-align: center;
+    filter: drop-shadow(0 3px 3px rgba(0,0,0,0.4));
+}
+
+/* ラーメン店ピン（🍜）・駅ピン（🚉）：絵文字を丸いバッジで囲んでアイコンらしく見せる。
+   Leafletが外側のdivに付けるデフォルトの背景・枠線は打ち消し、中の.marker-emoji-circleで
+   実際の円形バッジを描画する */
+.shop-marker-pin,
+.station-marker-pin-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.marker-emoji-circle {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+
+.marker-emoji-circle--shop {
+    font-size: 17px;
+    border: 2px solid #e74c3c;
+}
+
+.marker-emoji-circle--station {
+    font-size: 14px;
+    border: 2px solid #888;
+}
+
+/* ===================================================================
    ポップアップ（グルメアプリ風カードUI）
    Leaflet標準のラッパー余白・影を無効化し、popup-card 側で完結させる
    =================================================================== */
@@ -707,6 +794,20 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .leaflet-popup-content {
     margin: 0;
     width: auto !important;
+}
+
+/* 道路ポップアップなど、popup-cardで包まずbindPopup()に直接文字列を渡す簡易ポップアップ用。
+   white-space:nowrapは、width:auto !important の影響で折り返し可能な最小幅（1文字ずつ）
+   まで縮んでしまい、日本語テキストが縦書きのように見えてしまうのを防ぐための指定。
+   余白付きの枠で囲み、シンプルなラベルとして見せる。 */
+.popup-label-nowrap {
+    display: inline-block;
+    white-space: nowrap;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-weight: bold;
+    color: #333;
 }
 
 .popup-card {
@@ -936,8 +1037,20 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         font-size: 12px;
     }
 
-    /* --- 駅一覧サイドバー（モバイルは幅広） --- */
-    .station-sidebar { width: min(80vw, 260px); }
+    /* --- 駅一覧（モバイルは幅広） --- */
+    .station-list-body { width: min(80vw, 260px); }
+
+    /* --- 表示切り替えパネル位置（モバイルはピンをクリアボタンの高さに合わせる） --- */
+    .display-filter-wrapper { top: 172px; }
+
+    /* --- 表示切り替えトグルボタン（モバイル） --- */
+    .display-filter-toggle-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    /* --- 表示切り替え（モバイルは幅広） --- */
+    .display-filter-body { width: min(80vw, 270px); }
 
     /* --- タイトルパネル --- */
     .info-panel {
@@ -966,13 +1079,8 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
     .legend-item { margin: 3px 0; gap: 5px; }
     .legend-item span { font-size: 10px !important; color: #333 !important; }
-    .legend-pin  { width: 10px; height: 16px; }
+    .legend-emoji { width: 16px; font-size: 12px; }
     .legend-line { width: 20px; }
-
-    /* --- フィルターパネル --- */
-    .filter-panel  { left: 10px; padding: 7px 10px; min-width: 110px; }
-    .filter-title  { font-size: 11px; margin-bottom: 5px; padding-bottom: 4px; }
-    .filter-item   { font-size: 11px; margin: 3px 0; }
 
     /* --- ポップアップ --- */
     .leaflet-popup-content-wrapper { max-width: calc(100vw - 50px) !important; }
@@ -990,6 +1098,17 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
     /* --- 現在地ボタン --- */
     .locate-btn { width: 36px; height: 36px; }
+
+    /* --- ピン刺し再検索ボタン --- */
+    .pin-drop-btn { top: 84px; font-size: 11px; height: 36px; }
+
+    /* --- ピンをクリアボタン --- */
+    .pin-clear-btn { top: 126px; font-size: 11px; height: 36px; }
+
+    /* --- 検索エリア選択モーダル --- */
+    .area-select-container { max-width: calc(100% - 20px); padding: 24px 16px 20px; }
+    .area-select-station-row { flex-direction: column; }
+    .area-select-confirm-btn { width: 100%; }
 
     /* --- 管理者モードバッジ --- */
     .admin-mode-badge { bottom: 10px; left: 10px; font-size: 11px; padding: 6px 10px; }

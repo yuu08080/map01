@@ -3,18 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>東葛エリア 個人店 vs チェーン店 立地・生存戦略マップ</title>
+    <title>東葛エリア ラーメン店マップ｜現在地・駅からエリア検索</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
-    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="map"></div>
+
+    <!-- 検索エリア選択モーダル（ページ読み込み時に必ず表示。ピンはここで中心が決まるまで描画しない） -->
+    <div class="modal-overlay" id="areaSelectModal">
+        <div class="modal-container area-select-container">
+            <div class="modal-project-title area-select-title">📍 検索エリアを選んでください</div>
+            <p class="modal-description">
+                選んだ地点を中心に、半径1km以内のラーメン店・駅だけを地図に表示します。<br>
+                あとからでも右上の「📍 ピンを刺して再検索」ボタンで、いつでも検索エリアを変更できます。
+            </p>
+
+            <hr class="modal-divider">
+
+            <button type="button" class="popup-btn popup-btn-green area-select-current-btn" id="areaCurrentLocationBtn">
+                📡 現在地から探す
+            </button>
+            <p class="area-select-status" id="areaCurrentLocationStatus"></p>
+
+            <div class="area-select-divider"><span>または</span></div>
+
+            <div class="area-select-station-row">
+                <select class="area-select-select" id="areaStationSelect" disabled>
+                    <option value="">駅データを読み込み中...</option>
+                </select>
+                <button type="button" class="popup-btn popup-btn-blue area-select-confirm-btn" id="areaStationConfirmBtn" disabled>
+                    この駅から探す
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- 管理者モードバッジ（左下・有効時のみ表示、クリックでログアウト） -->
     <button id="adminModeBadge" class="admin-mode-badge" style="display:none;">🔐 管理者モード有効中（解除するにはここをクリック）</button>
@@ -52,14 +78,14 @@
         <div class="modal-container" id="aboutModalContainer">
             <button class="modal-close-btn" id="modalCloseBtn" aria-label="閉じる">×</button>
 
-            <div class="modal-project-title" id="modalTitle">🍜 個人店 vs チェーン店 立地・生存戦略マップ</div>
-            <div class="modal-subtitle">東葛エリア（柏市・松戸市・流山市・我孫子市）の飲食店立地分析 WebGISアプリ</div>
+            <div class="modal-project-title" id="modalTitle">🍜 東葛エリア ラーメン店マップ</div>
+            <div class="modal-subtitle">東葛エリア（柏市・松戸市・流山市・我孫子市）のラーメン店検索 WebGISアプリ</div>
 
             <hr class="modal-divider">
 
             <div class="modal-section-title">プロジェクト概要</div>
             <p class="modal-description">
-                本マップは、東葛エリアにおける飲食店の立地戦略を可視化した空間分布マップです。主要駅を中心とした半径500mの『徒歩圏内』に密集する個人店と、モータリゼーション（車社会）を背景に幹線道路沿いに展開する大型チェーン店の生存戦略の違いを、地理的データから比較・分析することを目的としています。今週のアップデートでは、店舗データの管理をGoogleスプレッドシートと連携させ、Web上のデータを直接読み込んで地図に反映する仕組みに移行しました。
+                本マップは、東葛エリアのラーメン店・駅の位置情報を可視化したWebGISアプリです。現在地の取得・駅の選択・地図上へのピン刺しのいずれかで検索中心を決めると、その地点から半径1km以内のラーメン店だけに絞り込んで表示します（ピン刺しモード）。ピンを解除すると、駅からの距離・駐車場の有無・営業時間などの条件でエリア全体から店舗を絞り込める表示切り替えフィルターモードに切り替わります。店舗データはGoogleスプレッドシートと連携しており、Web上のデータを直接読み込んで地図に反映しています。
             </p>
 
             <hr class="modal-divider">
@@ -68,13 +94,6 @@
             <p class="modal-description">
                 店舗データ（店名・緯度経度・カテゴリ・住所・営業時間・駐車場など）はGoogleスプレッドシートをデータベースとして管理しており、公開されたCSV形式のURLから <code>fetch()</code> で都度取得しています。そのため、スプレッドシート側の内容を編集するだけで、コードを変更することなくマップ上の店舗情報（追加・修正・カテゴリ変更など）を更新できます。
             </p>
-
-            <hr class="modal-divider">
-
-            <div class="modal-section-title">今週追加した機能</div>
-            <ul class="modal-feature-list">
-                <li>📊 <b>Googleスプレッドシート連携</b>：ローカルファイル（data.js）を廃止し、オンラインのスプレッドシートから店舗データを動的に取得するように変更</li>
-            </ul>
 
             <hr class="modal-divider">
 
@@ -123,24 +142,80 @@
         </svg>
     </button>
 
-    <!-- 駅一覧トグルボタン（左中央） -->
-    <button class="station-toggle-btn" id="stationToggleBtn">🚉駅一覧</button>
+    <!-- ピン刺し再検索モード トグルボタン（右上・ズームボタンの下） -->
+    <button id="pinDropBtn" class="pin-drop-btn" aria-pressed="false"
+            title="地図上の好きな場所をクリックすると、その地点を中心に半径1km以内を再検索します（表示切り替えフィルターとは排他）">
+        📍 ピンを刺して再検索
+    </button>
 
-    <!-- 駅一覧サイドバー（右から出現） -->
-    <div class="station-sidebar" id="stationSidebar">
-        <div class="station-sidebar-header">
-            <span>🚉 駅一覧</span>
-            <button class="station-sidebar-close" id="stationSidebarClose">✕</button>
-        </div>
-        <div class="station-sidebar-body" id="stationListBody"></div>
+    <!-- ピンをクリア（ピン刺しモード中のみ有効・押すと表示切り替えフィルターモードに戻る） -->
+    <button id="pinClearBtn" class="pin-clear-btn" disabled
+            title="検索中心ピンを消して、表示切り替えフィルターを全エリアに適用します">
+        ✖ ピンをクリア
+    </button>
+
+    <!-- 駅一覧（タイトル枠のすぐ下・凡例と同じ折りたたみ式のドロップダウン） -->
+    <div class="station-list-wrapper" id="stationListWrapper">
+        <button class="station-toggle-btn" id="stationToggleBtn">🚉 駅一覧 ▼</button>
+        <div class="station-list-body" id="stationListBody"></div>
     </div>
 
-    <!-- サイドバー背景オーバーレイ -->
-    <div class="station-sidebar-overlay" id="stationSidebarOverlay"></div>
+    <!-- 表示切り替え（右上・「ピンをクリア」ボタンのすぐ下／生存戦略フィルター／ピン刺しモード中は操作不可） -->
+    <div class="display-filter-wrapper" id="displayFilterWrapper">
+        <button class="display-filter-toggle-btn" id="displayFilterToggleBtn">🔍 表示切り替え ▼</button>
+        <div class="display-filter-body" id="displayFilterBody">
+            <div class="display-filter-notice" id="displayFilterNotice" style="display:none;">
+                📍 ピン刺しモード中は使用できません
+            </div>
+            <div class="display-filter-group display-filter-group--always-enabled">
+                <div class="display-filter-group-label">地図表示</div>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterShowStations" checked>
+                    駅を表示
+                </label>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterShowStationRadius">
+                    駅500m圏内の円を表示
+                </label>
+            </div>
+            <div class="display-filter-divider"></div>
+            <div class="display-filter-group">
+                <div class="display-filter-group-label">立地タイプ</div>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterNearStation">
+                    駅前・徒歩圏内（駅から500m以内）
+                </label>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterFarStation">
+                    ロードサイド・郊外型（駅から500m超）
+                </label>
+            </div>
+            <div class="display-filter-divider"></div>
+            <div class="display-filter-group">
+                <div class="display-filter-group-label">駐車場</div>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterParkingYes">
+                    駐車場あり
+                </label>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterParkingNo">
+                    駐車場なし
+                </label>
+            </div>
+            <div class="display-filter-divider"></div>
+            <div class="display-filter-group">
+                <div class="display-filter-group-label">営業時間</div>
+                <label class="display-filter-item">
+                    <input type="checkbox" id="filterLateNight">
+                    深夜営業型（22時以降も営業）
+                </label>
+            </div>
+        </div>
+    </div>
 
     <!-- タイトルパネル（左上） -->
     <div class="info-panel">
-        <h2>個人店 vs チェーン店 立地・生存戦略マップ</h2>
+        <h2>東葛エリア ラーメン店マップ</h2>
         <p><span class="shop-count">対象: 柏市・松戸市・流山市・我孫子市</span></p>
         <p style="margin-top:8px; font-size:11px; color:#999;">ピンをクリックで詳細を表示</p>
         <p class="update-date">店舗データ: Googleスプレッドシートと連携</p>
@@ -152,12 +227,6 @@
             <!-- ラーメン店カテゴリ（Googleスプレッドシートから動的取得し、JSでチェックボックスを生成） -->
             <div id="legendCategoryItems">
                 <div class="legend-item" id="legendCategoryLoading" style="color:#999;">カテゴリ読み込み中...</div>
-            </div>
-            <div class="legend-divider-thin"></div>
-            <!-- 駅500m圏（駅ピン自体は上のカテゴリ一覧に含まれる） -->
-            <div class="legend-item">
-                <div class="legend-circle-icon"></div>
-                <span style="font-size:12px; color:#333;">駅500m圏</span>
             </div>
             <div class="legend-divider-thin"></div>
             <!-- 道路 -->

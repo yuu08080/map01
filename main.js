@@ -6,7 +6,12 @@ const map = L.map('map', {
     minZoom: 11,
     zoomControl: false,
     maxBounds: [[35.60, 139.70], [36.08, 140.25]],
-    maxBoundsViscosity: 1.0
+    maxBoundsViscosity: 1.0,
+    // ズームを細かい単位で行えるようにする（＋ボタン／ホイール1回あたりの拡大率を抑える）
+    zoomSnap: 0.8,
+    zoomDelta: 0.8,
+    // ホイール1notchあたりに必要なスクロール量を増やし、慣性スクロールで一気に拡大されすぎるのを防ぐ
+    wheelPxPerZoomLevel: 120
 }).setView([35.8500, 140.0000], 12);
 
 L.control.zoom({ position: 'topright' }).addTo(map);
@@ -20,19 +25,50 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
 }).addTo(map);
 
 // ===================================================================
-// アイコン定義
+// 重なり順（Pane）の明示的な階層化
+// 上から: ラーメン店ピン(shopPane) > 駅ピン(stationPane) > 路線（basePane、タイルの直上）
+// ===================================================================
+map.createPane('shopPane');
+map.getPane('shopPane').style.zIndex = 650;
+
+map.createPane('stationPane');
+map.getPane('stationPane').style.zIndex = 620;
+
+map.createPane('basePane');
+map.getPane('basePane').style.zIndex = 410;
+
+// ===================================================================
+// アイコン定義（絵文字ピン。他の検索中心ピン「📍」と同じdivIcon方式）
 // ===================================================================
 
-// ラーメン店用（カテゴリごとに色分け。色名は pointhi/leaflet-color-markers 準拠）
-const createIcon = (color) => new L.Icon({
-    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.0/images/marker-shadow.png',
-    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
-    shadowSize: [41, 41], shadowAnchor: [12, 41]
-});
-const _iconCache = {};
-function getIcon(color) {
-    return _iconCache[color] || (_iconCache[color] = createIcon(color));
+// ラーメン店用（🍜を丸いバッジで囲んだアイコン）
+function createShopIcon() {
+    return L.divIcon({
+        className: 'shop-marker-pin',
+        html: '<div class="marker-emoji-circle marker-emoji-circle--shop">🍜</div>',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -18]
+    });
+}
+let _shopIcon = null;
+function getIcon() {
+    return _shopIcon || (_shopIcon = createShopIcon());
+}
+
+// 駅用（🚉を丸いバッジで囲んだアイコン。ラーメン店より目立たないよう一回り小さくする）
+function createStationIcon() {
+    return L.divIcon({
+        className: 'station-marker-pin-icon',
+        html: '<div class="marker-emoji-circle marker-emoji-circle--station">🚉</div>',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16]
+    });
+}
+let _stationIcon = null;
+function getSmallIcon() {
+    return _stationIcon || (_stationIcon = createStationIcon());
 }
 
 // ===================================================================
@@ -42,9 +78,8 @@ function getIcon(color) {
 // 公開されたGoogleスプレッドシートのCSV出力URL（このURLからデータを都度取得する）
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQHcC7BRftze6VGcNKcGoFGjd_0hSwkkchUqU4qVfwb8uUjrp0cShLY1ifvkKCmsqJFgUkOrYps5zaG/pub?gid=0&single=true&output=csv';
 
-// カテゴリごとのピン色（未知のカテゴリはフォールバック色を順番に割り当てる）
-const CATEGORY_PRESET_COLORS   = { 'チェーン店': 'red', '個人店': 'blue' };
-const CATEGORY_FALLBACK_COLORS = ['green', 'orange', 'violet', 'black', 'gold'];
+// 個人店・チェーン店の区別はせず、駅以外はすべて「ラーメン店」として扱う
+const RAMEN_CATEGORY_LABEL = 'ラーメン店';
 
 // RFC4180準拠の簡易CSVパーサー（引用符・カンマ・改行を含むセルに対応）
 function parseCSV(text) {
@@ -91,7 +126,8 @@ async function loadShopsFromSheet() {
             name: rec.name || '(名称不明)',
             lat: parseFloat(rec.lat),
             lon: parseFloat(rec.lng ?? rec.lon),
-            category: rec.category || 'その他',
+            // 個人店・チェーン店の区別はせず、駅以外はすべて「ラーメン店」として扱う
+            category: rec.category === '駅' ? '駅' : RAMEN_CATEGORY_LABEL,
             address: rec.address || '',
             openingHours: rec.opening_hours || rec.openinghours || '',
             parking: rec.parking || '',
@@ -733,46 +769,30 @@ async function fetchRouteCoords(waypoints) {
 }
 
 const roadDefs = [
-    { id: 'road6',   src: typeof route6Coords   !== 'undefined' ? route6Coords   : [], color: '#3498db', label: '国道6号',  popup: '<b>🛣️ 国道6号線</b>' },
-    { id: 'road16',  src: typeof route16Coords  !== 'undefined' ? route16Coords  : [], color: '#e67e22', label: '国道16号', popup: '<b>🛣️ 国道16号線</b>' },
-    { id: 'road5',   src: typeof route5Coords   !== 'undefined' ? route5Coords   : [], color: '#9b59b6', label: '流山街道', popup: '<b>🛣️ 流山街道 (県道5号)</b>' },
-    { id: 'road464', src: typeof route464Coords !== 'undefined' ? route464Coords : [], color: '#e84393', label: '国道464号', popup: '<b>🛣️ 国道464号線</b>' },
-    { id: 'road294', src: typeof route294Coords !== 'undefined' ? route294Coords : [], color: '#27ae60', label: '国道294号', popup: '<b>🛣️ 国道294号線</b>' },
+    { id: 'road6',   src: typeof route6Coords   !== 'undefined' ? route6Coords   : [], color: '#3498db', label: '国道6号',  popup: '<b class="popup-label-nowrap">国道6号線</b>' },
+    { id: 'road16',  src: typeof route16Coords  !== 'undefined' ? route16Coords  : [], color: '#e67e22', label: '国道16号', popup: '<b class="popup-label-nowrap">国道16号線</b>' },
+    { id: 'road5',   src: typeof route5Coords   !== 'undefined' ? route5Coords   : [], color: '#9b59b6', label: '流山街道', popup: '<b class="popup-label-nowrap">流山街道 (県道5号)</b>' },
+    { id: 'road464', src: typeof route464Coords !== 'undefined' ? route464Coords : [], color: '#e84393', label: '国道464号', popup: '<b class="popup-label-nowrap">国道464号線</b>' },
+    { id: 'road294', src: typeof route294Coords !== 'undefined' ? route294Coords : [], color: '#27ae60', label: '国道294号', popup: '<b class="popup-label-nowrap">国道294号線</b>' },
 ];
 
 roadDefs.forEach(road => { road.layer = L.layerGroup().addTo(map); });
 
-// ===================================================================
-// 駅500m圏サークル（道路ラインより先に追加して視覚的に下に配置）
-// スプレッドシートの category="駅" データ取得後に buildStationCircles() で構築する
-// ===================================================================
-const stationCirclesLayer = L.layerGroup().addTo(map);
-
-function buildStationCircles(stationShops) {
-    stationCirclesLayer.clearLayers();
-    stationShops.forEach(st => {
-        L.circle([st.lat, st.lon], {
-            radius: 500,
-            color: '#27ae60',
-            fillColor: '#27ae60',
-            fillOpacity: 0.07,
-            weight: 1.5,
-            opacity: 0.35,
-            interactive: false
-        }).addTo(stationCirclesLayer);
-    });
-}
-
 (async () => {
     for (const road of roadDefs) {
         if (road.src.length < 2) continue;
-        const style = { color: road.color, weight: 3, opacity: 0.55 };
+        const style = { pane: 'basePane', color: road.color, weight: 3, opacity: 0.55 };
+        // ピン刺しモード中に道路をクリックしても、地図への click イベント伝播で
+        // 誤って中心ピンが刺さらないよう stopPropagation しておく
+        // 道路名はただの小さなラベルなので閉じるボタンは表示しない（地図の他の場所を
+        // クリックすれば自動的に閉じる）
+        const popupOptions = { closeButton: false };
         try {
             const coords = await fetchRouteCoords(road.src);
-            L.polyline(coords, style).bindPopup(road.popup).addTo(road.layer);
+            L.polyline(coords, style).bindPopup(road.popup, popupOptions).on('click', L.DomEvent.stopPropagation).addTo(road.layer);
         } catch (e) {
             console.warn('OSRMルート取得失敗（直線で代替）:', road.popup, e.message);
-            L.polyline(road.src, style).bindPopup(road.popup).addTo(road.layer);
+            L.polyline(road.src, style).bindPopup(road.popup, popupOptions).on('click', L.DomEvent.stopPropagation).addTo(road.layer);
         }
         await new Promise(r => setTimeout(r, 250));
     }
@@ -785,7 +805,7 @@ function buildStationCircles(stationShops) {
 // ===================================================================
 const stationMarkerMap = new Map();  // 駅名 → marker（パネルクリック時のポップアップ用）
 
-// 駅一覧サイドバーのリストを動的に生成（スプレッドシートの行順のまま）
+// 駅一覧（凡例と同じ折りたたみ式ドロップダウン）のリストを動的に生成
 // スプレッドシートからの店舗データ取得完了後に shops を渡して呼び出す
 function buildStationList(shops) {
     const body = document.getElementById('stationListBody');
@@ -800,27 +820,32 @@ function buildStationList(shops) {
         item.textContent = `🚉 ${st.name}`;
         item.addEventListener('click', () => {
             closeSidebar();
-            map.flyTo([st.lat, st.lon], 15, { duration: 1.0 });
-            const marker = stationMarkerMap.get(st.name);
-            if (marker) setTimeout(() => marker.openPopup(), 1100);
+            // 単に地図を移動するだけでなく、その駅にピンを刺したのと同じ状態にする
+            // （検索中心をその駅にし、半径1km以内で再描画・表示切り替えは無効化）
+            setSearchPin(st.lat, st.lon);
+            // クリック直後は再描画でマーカーが作り直されているため、ここで参照を取り直す
+            setTimeout(() => {
+                const marker = stationMarkerMap.get(st.name);
+                if (marker) marker.openPopup();
+            }, 1300);
         });
         body.appendChild(item);
     });
 }
 
-// 駅一覧サイドバーの開閉制御
-function openSidebar() {
-    document.getElementById('stationSidebar').classList.add('open');
-    document.getElementById('stationSidebarOverlay').classList.add('open');
+// 駅一覧ドロップダウンの開閉制御（凡例と同じく、開いたまま地図を操作できる）
+function setStationListOpen(isOpen) {
+    const body = document.getElementById('stationListBody');
+    const btn  = document.getElementById('stationToggleBtn');
+    if (!body || !btn) return;
+    body.classList.toggle('open', isOpen);
+    btn.textContent = isOpen ? '🚉 駅一覧 ▲' : '🚉 駅一覧 ▼';
 }
-function closeSidebar() {
-    document.getElementById('stationSidebar').classList.remove('open');
-    document.getElementById('stationSidebarOverlay').classList.remove('open');
-}
+function closeSidebar() { setStationListOpen(false); }
 
-document.getElementById('stationToggleBtn').addEventListener('click', openSidebar);
-document.getElementById('stationSidebarClose').addEventListener('click', closeSidebar);
-document.getElementById('stationSidebarOverlay').addEventListener('click', closeSidebar);
+document.getElementById('stationToggleBtn').addEventListener('click', function() {
+    setStationListOpen(!document.getElementById('stationListBody').classList.contains('open'));
+});
 
 // ===================================================================
 // 現在地ロジック
@@ -828,11 +853,14 @@ document.getElementById('stationSidebarOverlay').addEventListener('click', close
 
 const MAP_BOUNDS = [[35.60, 139.70], [36.08, 140.25]];
 
-let userPos        = null;
-let locationMarker = null;
-let locationCircle = null;
+// 現在地の取得に失敗した場合のフォールバック中心地点（対象4市のほぼ中央）
+const DEFAULT_CENTER = { lat: 35.8500, lng: 140.0000 };
 
-// ---- ユーザーマーカーを地図に表示 ----
+let locationMarker    = null; // 現在地マーカー（青丸）。検索ピンの状態に関わらず常に表示され続ける
+let locationCircle    = null; // 現在地の精度円
+let searchCenterMarker = null; // 検索中心（📍）を示すマーカー。ピン刺し／駅選択／現在地選択のたびに置き直す
+
+// ---- 現在地マーカーを地図に表示する（検索ピンとは独立して常に残り続ける） ----
 function showUserMarker(lat, lng, accuracy) {
     if (locationMarker) { map.removeLayer(locationMarker); locationMarker = null; }
     if (locationCircle) { map.removeLayer(locationCircle); locationCircle = null; }
@@ -851,14 +879,22 @@ function showUserMarker(lat, lng, accuracy) {
     }
 }
 
-// ---- 現在地を初期化（成功・フォールバック共通エントリポイント） ----
-function initUserPosition(lat, lng, accuracy) {
-    userPos         = { lat, lng };
-    showUserMarker(lat, lng, accuracy);
+// ---- 検索中心ピン（📍）だけを消す。現在地マーカーには触れない ----
+function clearSearchPinMarker() {
+    if (searchCenterMarker) { map.removeLayer(searchCenterMarker); searchCenterMarker = null; }
+}
 
-    // マップをユーザー位置に移動（maxBounds を一時解除して飛ぶ）
+// ---- 中心点へ地図を移動する（maxBounds を一時解除して飛ぶ、共通処理） ----
+// 固定ズームレベルではなく、検索半径1kmの円がちょうど画面に収まるズームへ飛ぶ
+function flyToArea(lat, lng, opts) {
+    opts = opts || {};
     map.setMaxBounds(null);
-    map.flyTo([lat, lng], 15, { duration: 1.5 });
+
+    // L.circle().getBounds() は地図に追加されていないと使えないため、
+    // 地図非依存で計算できる LatLng.toBounds() で半径1kmの矩形範囲を求める
+    const bounds = L.latLng(lat, lng).toBounds(SEARCH_RADIUS_M * 2);
+    map.flyToBounds(bounds, { duration: opts.duration ?? 1.5, padding: [24, 24] });
+
     map.once('moveend', function() {
         if (L.latLngBounds(MAP_BOUNDS).contains([lat, lng])) {
             map.setMaxBounds(MAP_BOUNDS);
@@ -866,221 +902,402 @@ function initUserPosition(lat, lng, accuracy) {
     });
 }
 
-// ===================================================================
-// ラーメン店マーカー（カテゴリ別クラスター + クリック時ズームイン）
-// ===================================================================
-function makeClusterOptions(theme) {
-    const prefix = theme === 'chain' ? 'chain-' : '';
-    return {
-        maxClusterRadius: 80,
-        disableClusteringAtZoom: 17,
-        showCoverageOnHover: false,
-        iconCreateFunction: function(cluster) {
-            const count = cluster.getChildCount();
-            let suffix, size;
-            if (count < 5)       { suffix = 'low';  size = 32; }
-            else if (count < 20) { suffix = 'mid';  size = 40; }
-            else                 { suffix = 'high'; size = 50; }
-            return L.divIcon({
-                html: `<div class="cluster-inner">${count}</div>`,
-                className: `marker-cluster-custom cluster-${prefix}${suffix}`,
-                iconSize: L.point(size, size)
-            });
-        }
-    };
+// ---- 現在地を検索中心として初期化（成功・フォールバック共通エントリポイント） ----
+// 現在地ボタン／初期エリア選択モーダルの両方から呼ばれる。
+// 現在地マーカー（青丸）を表示したうえで、同じ地点に検索ピン（📍）を刺す。
+// 現在地マーカーはピンが消えても残り続ける、ピンとは独立した表示。
+function initUserPosition(lat, lng, accuracy) {
+    showUserMarker(lat, lng, accuracy);
+    setSearchPin(lat, lng);
 }
 
-// カテゴリ名 → { cluster, color } を保持する（登場順にフォールバック色を割り当てる）
+// ---- 駅選択／ピン刺しモードで指定した地点を検索中心にする ----
+// 現在地マーカーとは見た目を変え、専用の📍アイコンを立てる。現在地マーカーには触れない。
+// 連続してピンを刺した場合も、直前のピンを消してから描画し直す。
+function setSearchPin(lat, lng) {
+    clearSearchPinMarker();
+
+    searchCenterMarker = L.marker([lat, lng], {
+        icon: L.divIcon({
+            className: 'search-center-pin',
+            html: '📍',
+            iconSize: [30, 30],
+            iconAnchor: [15, 28]
+        }),
+        zIndexOffset: 1000
+    }).addTo(map);
+
+    currentCenter = { lat, lng };
+    enterPinMode();
+    applyAreaFilter(lat, lng);
+    flyToArea(lat, lng, { duration: 1.2 });
+}
+
+// ===================================================================
+// ラーメン店マーカー（クラスター化はせず、常に個々のピンをそのまま表示する）
+// ===================================================================
+
+// カテゴリ名 → { cluster } を保持する
 const categoryClusters = new Map();
 
 function getOrCreateCategoryCluster(category) {
     if (categoryClusters.has(category)) return categoryClusters.get(category);
 
-    const usedColors = new Set([...categoryClusters.values()].map(v => v.color));
-    const color = CATEGORY_PRESET_COLORS[category] ||
-        CATEGORY_FALLBACK_COLORS.find(c => !usedColors.has(c)) || 'grey';
-    const theme = category === 'チェーン店' ? 'chain' : '';
-
-    // 駅はクラスター化せず、常に個々のピンをそのまま表示する
-    const layer = category === '駅'
-        ? L.layerGroup()
-        : L.markerClusterGroup(makeClusterOptions(theme));
-
-    const entry = { cluster: layer, color };
+    const entry = { cluster: L.layerGroup() };
     categoryClusters.set(category, entry);
     return entry;
 }
 
-function setCategoryVisible(category, checked) {
-    const entry = categoryClusters.get(category);
-    if (!entry) return;
-    checked ? entry.cluster.addTo(map) : map.removeLayer(entry.cluster);
-}
-
-// カテゴリ名 → そのカテゴリのチェックボックス群（凡例・表示切り替えパネルの両方に存在するため同期させる）
-const categoryCheckboxes = new Map();
-
-function registerCategoryCheckbox(category, input) {
-    if (!categoryCheckboxes.has(category)) categoryCheckboxes.set(category, new Set());
-    categoryCheckboxes.get(category).add(input);
-    input.addEventListener('change', function() {
-        setCategoryVisible(category, this.checked);
-        categoryCheckboxes.get(category).forEach(cb => { if (cb !== this) cb.checked = this.checked; });
-    });
-}
-
-function buildCategoryToggleItem(itemClass, pinClass, category, color) {
-    const label = document.createElement('label');
-    label.className = itemClass;
-    label.innerHTML = `
-        <input type="checkbox" checked>
-        <img class="${pinClass}" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png">
-        <span style="font-size:12px; color:#333;">${escapeHtml(category)}</span>
-    `;
-    registerCategoryCheckbox(category, label.querySelector('input'));
-    return label;
-}
-
-// 凡例用：チェックボックスの無い、色見本のみの表示アイテム
-function buildCategoryLegendItem(category, color) {
+// 凡例用：絵文字アイコン + カテゴリ名の表示アイテム（地図上のピンと同じ絵文字を使う）
+function buildCategoryLegendItem(category) {
     const div = document.createElement('div');
     div.className = 'legend-item';
+    const emoji = category === '駅' ? '🚉' : '🍜';
     div.innerHTML = `
-        <img class="legend-pin" src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png">
+        <span class="legend-emoji">${emoji}</span>
         <span style="font-size:12px; color:#333;">${escapeHtml(category)}</span>
     `;
     return div;
 }
 
-// 凡例（右下・表示のみ）と表示切り替えパネル（左・チェックボックス付き）を生成する
+// 凡例（右下・表示のみ）を生成する
 function buildCategoryLegend() {
     const legendContainer = document.getElementById('legendCategoryItems');
-    const filterContainer = document.getElementById('filterCategoryItems');
-    if (legendContainer) legendContainer.innerHTML = '';
-    if (filterContainer) filterContainer.innerHTML = '';
-    categoryCheckboxes.clear();
+    if (!legendContainer) return;
+    legendContainer.innerHTML = '';
 
-    categoryClusters.forEach(({ color }, category) => {
-        if (legendContainer) {
-            legendContainer.appendChild(buildCategoryLegendItem(category, color));
-        }
-        if (filterContainer) {
-            filterContainer.appendChild(buildCategoryToggleItem('filter-item', 'filter-pin', category, color));
-        }
+    categoryClusters.forEach((_, category) => {
+        legendContainer.appendChild(buildCategoryLegendItem(category));
     });
 }
 
-// スプレッドシートからデータを取得し、マーカー・凡例・駅一覧を構築する
+// ===================================================================
+// エリア検索（中心点から半径1km以内のみを表示）
+// スプレッドシートの全件は allShops に保持しておき、中心点が決まるたびに
+// applyAreaFilter() で距離計算をやり直して該当するピンだけを描画し直す
+// ===================================================================
+let allShops     = [];   // スプレッドシートの全件（フィルタなし）
+let currentCenter = null; // { lat, lng } 現在の検索中心（未選択なら null）
+const SEARCH_RADIUS_M = 1000;
+const NEAR_STATION_RADIUS_M = 500; // 「駅前・徒歩圏内」の判定基準
+
+// 現在描画されている店舗・駅ピンをすべてクリアする（クラスター自体は残す）
+function clearAllShopMarkers() {
+    categoryClusters.forEach(({ cluster }) => cluster.clearLayers());
+    stationMarkerMap.clear();
+}
+
+// 1件ぶんの店舗マーカーを生成し、該当カテゴリのクラスターに追加する
+function addShopMarker(shop) {
+    const { cluster } = getOrCreateCategoryCluster(shop.category);
+    const isStation = shop.category === '駅';
+    const icon = isStation ? getSmallIcon() : getIcon();
+    const marker = L.marker([shop.lat, shop.lon], { icon, pane: isStation ? 'stationPane' : 'shopPane' });
+
+    // 関数を渡すことで、ポップアップを開くたびに最新のレビュー内容を反映する
+    marker.bindPopup(() => buildRichPopupElement(shop));
+
+    marker.on('click', function(e) {
+        // ピン刺しモード中に店舗ピンをクリックしても、その場所に新しい中心ピンが
+        // 刺さってしまわないよう、地図への click イベントの伝播を止める
+        L.DomEvent.stopPropagation(e);
+        map.flyTo([shop.lat, shop.lon], Math.max(map.getZoom(), 16), { duration: 0.7 });
+    });
+
+    cluster.addLayer(marker);
+    if (isStation) {
+        stationMarkerMap.set(shop.name, marker);
+        // ピン刺しモード中に生成された駅ピンは、最初からクリック不可にしておく
+        // （駅の位置にも検索ピンを刺せるよう、駅ピン自身のクリックを地図クリックとして扱わせる）
+        if (pinDropMode) {
+            const el = marker.getElement();
+            if (el) el.style.pointerEvents = 'none';
+        }
+    }
+}
+
+// ===================================================================
+// 表示切り替え（生存戦略フィルター）
+// 「最寄り駅からの距離」「駐車場の有無」「深夜営業か」を店舗ごとに事前計算し、
+// 左側パネルのチェックボックスで絞り込めるようにする。
+// ===================================================================
+
+// 全店舗ぶんの最寄り駅距離・駐車場有無・深夜営業フラグを一括で事前計算する。
+// 描画のたびに計算し直すと重いため、データ取得直後に一度だけ実行してプロパティに持たせる。
+function computeDerivedShopProps(shops) {
+    const stations = shops.filter(s => s.category === '駅');
+
+    shops.forEach(shop => {
+        if (shop.category === '駅') return; // 駅自体には適用しない
+
+        let nearestStationDist = Infinity;
+        const from = L.latLng(shop.lat, shop.lon);
+        stations.forEach(st => {
+            const d = map.distance(from, L.latLng(st.lat, st.lon));
+            if (d < nearestStationDist) nearestStationDist = d;
+        });
+
+        shop.nearestStationDist = nearestStationDist;
+        shop.parkingAvailable   = shopHasParking(shop.parking);
+        shop.isLateNight        = isLateNightOpen(shop.openingHours);
+    });
+}
+
+// parking列の文字列から駐車場の有無を判定する（renderParking() の判定基準と揃える）
+function shopHasParking(parkingStr) {
+    if (!parkingStr) return false;             // 空欄 → なし扱い
+    if (/なし/.test(parkingStr)) return false;
+    if (/あり/.test(parkingStr)) return true;
+    return false;                               // どちらの語も含まない場合は「なし」扱い
+}
+
+// opening_hours列の文字列から「22:00以降も営業する時間帯」を含むかを判定する。
+// 既存の営業状況判定（getShopStatus）が使っている時刻抽出ロジック（_parseTimePeriods /
+// _toMin）をそのまま利用する: 正規表現で "HH:MM-HH:MM" 形式の時間帯を曜日指定に関わらず
+// すべて抜き出し、いずれかの終了時刻が22:00（=1320分）以降かどうかを見る。
+// 「翌」が付いた終了時刻（例: 18:00-翌2:00）は _toMin() 側で24時間加算されるため、
+// 日をまたぐ深夜営業も自動的に判定対象に含まれる。
+function isLateNightOpen(hoursStr) {
+    if (!hoursStr) return false;
+    if (/24時間/.test(hoursStr)) return true;
+    const periods = _parseTimePeriods(hoursStr);
+    return periods.some(p => p.end >= 22 * 60);
+}
+
+// 表示切り替えパネルのチェックボックス状態
+const displayFilterState = {
+    showStations: true,  // 駅を表示（地図表示グループ・初期値はON＝従来通り常に表示）
+    nearStation:  false, // 駅前・徒歩圏内（駅から500m以内）
+    farStation:   false, // ロードサイド・郊外型（駅から500m超）
+    parkingYes:   false, // 駐車場あり
+    parkingNo:    false, // 駐車場なし
+    lateNight:    false  // 深夜営業型（22時以降も営業）
+};
+
+// チェックが入った条件を店舗が満たすか判定する。
+// 「駅前⇔郊外」「駐車場あり⇔なし」はそれぞれ二者択一の軸なので、同じ軸の中は
+// OR（どちらかにチェックが入っていれば一致で表示）、軸をまたぐ場合はAND（すべての
+// アクティブな軸を満たす店舗だけ表示）という複合ロジックにする。両方チェックすると
+// 常に非表示になってしまう単純なAND全条件方式より、直感的に操作できるための工夫。
+function passesDisplayFilters(shop) {
+    if (shop.category === '駅') return displayFilterState.showStations; // 駅は「駅を表示」チェックのみで判定
+
+    const locationActive = displayFilterState.nearStation || displayFilterState.farStation;
+    if (locationActive) {
+        const matchesNear = displayFilterState.nearStation && shop.nearestStationDist <= NEAR_STATION_RADIUS_M;
+        const matchesFar  = displayFilterState.farStation  && shop.nearestStationDist >  NEAR_STATION_RADIUS_M;
+        if (!matchesNear && !matchesFar) return false;
+    }
+
+    const parkingActive = displayFilterState.parkingYes || displayFilterState.parkingNo;
+    if (parkingActive) {
+        const matchesYes = displayFilterState.parkingYes && shop.parkingAvailable;
+        const matchesNo  = displayFilterState.parkingNo  && !shop.parkingAvailable;
+        if (!matchesYes && !matchesNo) return false;
+    }
+
+    if (displayFilterState.lateNight && !shop.isLateNight) return false;
+
+    return true;
+}
+
+let areaFilteredShops = []; // 現在の検索エリア内の店舗＋駅全件（ピン刺しモード中の描画対象）
+
+// 中心点(lat, lng)から半径1km以内の店舗だけを対象にする。駅は距離に関係なく常に全件対象。
+// 実際の描画は renderFilteredShops() が行う（ピン刺しモード中はこの結果をそのまま使う）。
+function applyAreaFilter(lat, lng) {
+    if (!allShops.length) { areaFilteredShops = []; renderFilteredShops(); return; }
+
+    const center = L.latLng(lat, lng);
+    areaFilteredShops = allShops.filter(s => {
+        if (s.category === '駅') return true;
+        return map.distance(center, L.latLng(s.lat, s.lon)) <= SEARCH_RADIUS_M;
+    });
+    renderFilteredShops();
+}
+
+// ===================================================================
+// モード排他制御（ピン刺しモード ⇔ 表示切り替えフィルターモード）
+// 検索中心ピンによる半径1km絞り込みと、表示切り替えチェックボックスによる全エリア
+// 絞り込みは同時には効かせない。isPinModeActive が唯一の真偽の切り替えポイントで、
+// ピンが消えたら自動的にフィルター再評価（renderFilteredShops）が走り、ピンが刺さって
+// いる間はチェックボックスの状態そのものを無視して距離条件だけで描画する。
+// ===================================================================
+let isPinModeActive = false;
+
+// 検索中心ピンが確定した瞬間（setSearchPin / initUserPosition）に呼ぶ。
+function enterPinMode() {
+    isPinModeActive = true;
+    setDisplayFilterEnabled(false);
+    updatePinClearBtn();
+}
+
+// ピンを消してフィルターモードに戻す。「📍ボタンをOFF」「ピンをクリア」の両方から呼ばれる。
+// 現在地マーカーはピンとは独立した表示のため、ここでは消さずそのまま残す。
+function exitPinMode() {
+    isPinModeActive = false;
+    currentCenter = null;
+    areaFilteredShops = [];
+    clearSearchPinMarker();
+    setDisplayFilterEnabled(true);
+    updatePinClearBtn();
+    renderFilteredShops();
+}
+
+// 表示切り替えパネルのチェックボックス群を一括で有効／無効化し、視覚的にもグレーアウトさせる
+function setDisplayFilterEnabled(enabled) {
+    const body = document.getElementById('displayFilterBody');
+    if (body) body.classList.toggle('disabled', !enabled);
+    const notice = document.getElementById('displayFilterNotice');
+    if (notice) notice.style.display = enabled ? 'none' : 'block';
+    ['filterNearStation', 'filterFarStation', 'filterParkingYes', 'filterParkingNo', 'filterLateNight']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !enabled;
+        });
+}
+
+function updatePinClearBtn() {
+    const btn = document.getElementById('pinClearBtn');
+    if (btn) btn.disabled = !isPinModeActive;
+}
+
+// 表示切り替えのチェックボックスが1つでもONになっているかどうか
+function isAnyDisplayFilterActive() {
+    return displayFilterState.nearStation || displayFilterState.farStation ||
+           displayFilterState.parkingYes  || displayFilterState.parkingNo  ||
+           displayFilterState.lateNight;
+}
+
+// 描画の分岐点: ピン刺しモード中は店舗の絞り込みチェックボックスを一切見ず、検索中心
+// から半径1km以内（＋駅全件）だけを描画する。フィルターモード中は全エリアの店舗に
+// チェックボックス条件（AND/ORの複合ロジック）を適用して描画する。チェックボックスが
+// 1つも選ばれていない場合は「全店舗表示」にはせず、駅ピンだけを残して空の地図にする。
+// 「駅を表示」チェックボックスだけは地図表示グループに属し、駅の絞り込みではないため
+// ピン刺しモード中も含め常に効かせる。
+function renderFilteredShops() {
+    clearAllShopMarkers();
+    if (isPinModeActive) {
+        areaFilteredShops
+            .filter(s => s.category !== '駅' || displayFilterState.showStations)
+            .forEach(addShopMarker);
+    } else if (isAnyDisplayFilterActive()) {
+        allShops.filter(passesDisplayFilters).forEach(addShopMarker);
+    } else {
+        allShops.filter(s => s.category === '駅' && displayFilterState.showStations).forEach(addShopMarker);
+    }
+}
+
+// 表示切り替えパネルのチェックボックスと状態を結びつける
+function initDisplayFilterControls() {
+    const bindings = [
+        ['filterNearStation', 'nearStation'],
+        ['filterFarStation',  'farStation'],
+        ['filterParkingYes',  'parkingYes'],
+        ['filterParkingNo',   'parkingNo'],
+        ['filterLateNight',   'lateNight']
+    ];
+    bindings.forEach(([id, key]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', () => {
+            // ピン刺しモード中はdisabledで操作不可のはずだが、念のため状態変化を無視する
+            if (isPinModeActive) return;
+            displayFilterState[key] = el.checked;
+            renderFilteredShops();
+        });
+    });
+}
+initDisplayFilterControls();
+
+// 「駅を表示」チェックボックス（地図表示グループ）。店舗の絞り込みとは無関係なので、
+// 「駅500m圏内の円」と同様にピン刺しモード中でも常に操作可能にしてある。
+const filterShowStationsEl = document.getElementById('filterShowStations');
+if (filterShowStationsEl) {
+    filterShowStationsEl.addEventListener('change', () => {
+        displayFilterState.showStations = filterShowStationsEl.checked;
+        renderFilteredShops();
+    });
+}
+
+// ===================================================================
+// 駅500m圏内の円（表示切り替えパネルの「地図表示」トグル）
+// 店舗の絞り込みとは無関係な純粋な地図オーバーレイなので、ピン刺しモード中でも
+// 常に操作可能（表示切り替えのdisabled化の対象外）にしてある。
+// ===================================================================
+let stationRadiusLayer = null;
+
+// 駅データ取得後に一度だけ呼び、駅ごとの500m円をレイヤーグループとして構築しておく
+// （デフォルトでは地図に追加しない。チェックボックスON時のみ addLayer する）
+function buildStationRadiusCircles(shops) {
+    if (stationRadiusLayer) map.removeLayer(stationRadiusLayer);
+    stationRadiusLayer = L.layerGroup(
+        shops.filter(s => s.category === '駅').map(st => L.circle([st.lat, st.lon], {
+            radius: NEAR_STATION_RADIUS_M,
+            color: '#7f8c8d',
+            weight: 1.5,
+            dashArray: '4 4',
+            fillColor: '#7f8c8d',
+            fillOpacity: 0.06,
+            interactive: false
+        }))
+    );
+}
+
+document.getElementById('filterShowStationRadius').addEventListener('change', function() {
+    if (!stationRadiusLayer) return;
+    if (this.checked) {
+        stationRadiusLayer.addTo(map);
+    } else {
+        map.removeLayer(stationRadiusLayer);
+    }
+});
+
+document.getElementById('displayFilterToggleBtn').addEventListener('click', function() {
+    const body = document.getElementById('displayFilterBody');
+    const btn  = this;
+    const isOpen = !body.classList.contains('open');
+    body.classList.toggle('open', isOpen);
+    btn.textContent = isOpen ? '🔍 表示切り替え ▲' : '🔍 表示切り替え ▼';
+});
+
+// スプレッドシートからデータを取得し、凡例・駅一覧・エリア選択モーダルの駅プルダウンを構築する
+// （ピン自体は検索中心が決まってから applyAreaFilter() が描画する）
 (async function initShopData() {
-    let shops = [];
     try {
-        shops = await loadShopsFromSheet();
+        allShops = await loadShopsFromSheet();
     } catch (e) {
         console.error('[ラーメンマップ] スプレッドシートの取得に失敗しました:', e);
         showDataError();
+        allShops = [];
     }
 
-    shops.forEach(shop => {
-        const { cluster, color } = getOrCreateCategoryCluster(shop.category);
-        const marker = L.marker([shop.lat, shop.lon], { icon: getIcon(color) });
+    // 表示切り替えフィルターで使う派生プロパティ（最寄り駅距離・駐車場有無・深夜営業）を一括計算
+    computeDerivedShopProps(allShops);
 
-        // 関数を渡すことで、ポップアップを開くたびに最新のレビュー内容を反映する
-        marker.bindPopup(() => buildRichPopupElement(shop));
-
-        marker.on('click', function() {
-            map.flyTo([shop.lat, shop.lon], Math.max(map.getZoom(), 16), { duration: 0.7 });
-        });
-
-        cluster.addLayer(marker);
-        if (shop.category === '駅') stationMarkerMap.set(shop.name, marker);
-    });
-
+    // クラスター・色の登録だけ先に済ませておく（ピンはまだ追加しない）
+    allShops.forEach(shop => getOrCreateCategoryCluster(shop.category));
     categoryClusters.forEach(({ cluster }) => cluster.addTo(map));
+
     buildCategoryLegend();
-    buildStationCircles(shops.filter(s => s.category === '駅'));
-    buildStationList(shops);
+    buildStationList(allShops);
+    buildStationRadiusCircles(allShops);
+    populateAreaStationSelect(allShops);
+
+    // ユーザーがデータ取得完了より先に検索中心を選び終えていた場合に備えて、再計算する
+    if (currentCenter) applyAreaFilter(currentCenter.lat, currentCenter.lng);
 })();
 
-// ===================================================================
-// フィルターコントロール（タイトル・駅一覧タブのすぐ下に配置）
-// ===================================================================
-function buildFilterPanel() {
-    const container = L.DomUtil.create('div', 'filter-panel');
-    container.id = 'filterPanel';
-    L.DomEvent.disableClickPropagation(container);
-    L.DomEvent.disableScrollPropagation(container);
-    const roadSubHtml = roadDefs.map(road => `
-        <label class="filter-item filter-sub-item">
-            <input type="checkbox" id="${road.id}Filter" checked>
-            <div class="filter-road-line-icon" style="background:${road.color};"></div>
-            <span>${road.label}</span>
-        </label>
-    `).join('');
-
-    container.innerHTML = `
-        <div class="filter-title">表示切り替え</div>
-        <div id="filterCategoryItems">
-            <div class="filter-item" style="color:#999;">カテゴリ読み込み中...</div>
-        </div>
-        <div class="filter-divider"></div>
-        <div class="filter-roads-header">
-            <label class="filter-item" style="margin:0;flex:1;">
-                <input type="checkbox" id="roadsFilter" checked>
-                <div class="filter-road-line-icon"></div>
-                <span>国道・街道</span>
-            </label>
-            <button class="filter-roads-toggle" id="roadsToggle" title="個別切替">▼</button>
-        </div>
-        <div class="filter-roads-sub" id="roadsSub">
-            ${roadSubHtml}
-        </div>
-    `;
-
-    const masterCb = container.querySelector('#roadsFilter');
-    masterCb.addEventListener('change', function() {
-        roadDefs.forEach(road => {
-            const cb = container.querySelector(`#${road.id}Filter`);
-            cb.checked = this.checked;
-            this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
-        });
-    });
-
-    roadDefs.forEach(road => {
-        container.querySelector(`#${road.id}Filter`).addEventListener('change', function() {
-            this.checked ? road.layer.addTo(map) : map.removeLayer(road.layer);
-            const checkedCount = roadDefs.filter(r => container.querySelector(`#${r.id}Filter`).checked).length;
-            masterCb.indeterminate = checkedCount > 0 && checkedCount < roadDefs.length;
-            masterCb.checked = checkedCount === roadDefs.length;
-        });
-    });
-
-    const toggleBtn = container.querySelector('#roadsToggle');
-    const subPanel  = container.querySelector('#roadsSub');
-    toggleBtn.addEventListener('click', function() {
-        const isOpen = subPanel.classList.toggle('open');
-        toggleBtn.textContent = isOpen ? '▲' : '▼';
-    });
-
-    document.body.appendChild(container);
-    return container;
-}
-buildFilterPanel();
-
-// タイトル枠 → 駅一覧タブ → 表示切り替え枠の順に、上から詰めて配置する。
-// 各枠は top を固定値で持つため、国道・街道の折りたたみを開閉しても
-// 自分より上にある枠の位置は動かない。
+// タイトル枠 → 駅一覧ドロップダウンの順に、上から詰めて配置する。
+// （表示切り替えパネルは右上の「ピンをクリア」ボタン下に固定配置のため、ここでは扱わない）
 function layoutLeftStack() {
-    const infoPanel   = document.querySelector('.info-panel');
-    const stationTab  = document.getElementById('stationToggleBtn');
-    const filterPanel = document.getElementById('filterPanel');
-    if (!infoPanel || !stationTab || !filterPanel) return;
+    const infoPanel = document.querySelector('.info-panel');
+    const stationWrapper = document.getElementById('stationListWrapper');
+    if (!infoPanel || !stationWrapper) return;
 
     const gap = 12;
     const infoBottom = infoPanel.getBoundingClientRect().bottom;
-    stationTab.style.top = `${infoBottom + gap}px`;
-
-    const stationBottom = stationTab.getBoundingClientRect().bottom;
-    filterPanel.style.top = `${stationBottom + gap}px`;
+    stationWrapper.style.top = `${infoBottom + gap}px`;
 }
 layoutLeftStack();
 window.addEventListener('resize', layoutLeftStack);
@@ -1170,18 +1387,154 @@ window.addEventListener('resize', layoutLeftStack);
 initAdminMode();
 
 // ===================================================================
-// ページ読み込み時の自動位置情報取得
+// 検索エリア選択モーダル（ページ読み込み時に必ず表示・ピン描画前の必須ステップ）
 // ===================================================================
-(function initGeolocation() {
-    if (!navigator.geolocation) return;
 
-    navigator.geolocation.getCurrentPosition(
-        function(pos) {
-            initUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
-        },
-        function(err) {
-            console.warn('[ラーメンマップ] 位置情報の取得に失敗しました（' + err.message + '）。');
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
+// 駅データ取得後に呼び出し、プルダウンへ駅名を並べる（駅は初期状態で選択不可のままにしない）
+function populateAreaStationSelect(shops) {
+    const select      = document.getElementById('areaStationSelect');
+    const confirmBtn  = document.getElementById('areaStationConfirmBtn');
+    if (!select || !confirmBtn) return;
+
+    const stations = shops.filter(s => s.category === '駅');
+    if (stations.length === 0) {
+        select.innerHTML = '<option value="">駅データがありません</option>';
+        return;
+    }
+
+    select.innerHTML = stations.map(st => `<option value="${escapeHtml(st.name)}">🚉 ${escapeHtml(st.name)}</option>`).join('');
+    select.disabled = false;
+    confirmBtn.disabled = false;
+}
+
+(function initAreaSelectModal() {
+    const overlay      = document.getElementById('areaSelectModal');
+    const currentBtn    = document.getElementById('areaCurrentLocationBtn');
+    const statusEl       = document.getElementById('areaCurrentLocationStatus');
+    const stationSelect  = document.getElementById('areaStationSelect');
+    const stationConfirm = document.getElementById('areaStationConfirmBtn');
+    if (!overlay || !currentBtn || !stationSelect || !stationConfirm) return;
+
+    function closeModal() { overlay.classList.remove('open'); }
+
+    // 現在地の取得に失敗した場合は、既定の中心地点にフォールバックする
+    function fallbackToDefault(message) {
+        if (statusEl) statusEl.textContent = message + ' 既定のエリアを表示します。';
+        setSearchPin(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        closeModal();
+    }
+
+    currentBtn.addEventListener('click', function() {
+        if (window.location.protocol === 'file:' || !navigator.geolocation) {
+            fallbackToDefault('このブラウザでは位置情報を取得できません。');
+            return;
+        }
+
+        currentBtn.disabled = true;
+        if (statusEl) statusEl.textContent = '📡 現在地を取得中...';
+
+        try {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    currentBtn.disabled = false;
+                    initUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+                    closeModal();
+                },
+                function(err) {
+                    currentBtn.disabled = false;
+                    const messages = {
+                        1: '位置情報の使用が拒否されました。',
+                        2: '位置情報を取得できませんでした。',
+                        3: '位置情報の取得がタイムアウトしました。'
+                    };
+                    fallbackToDefault(messages[err.code] || '位置情報の取得に失敗しました。');
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        } catch (e) {
+            // Geolocation API 自体が例外を投げるような環境（一部のWebView等）への保険
+            currentBtn.disabled = false;
+            fallbackToDefault('位置情報の取得中にエラーが発生しました。');
+        }
+    });
+
+    stationConfirm.addEventListener('click', function() {
+        const name = stationSelect.value;
+        if (!name) { alert('駅を選択してください。'); return; }
+
+        const station = allShops.find(s => s.category === '駅' && s.name === name);
+        if (!station) { alert('選択した駅のデータが見つかりませんでした。'); return; }
+
+        setSearchPin(station.lat, station.lon);
+        closeModal();
+    });
+
+    // ページ読み込み完了時、ピンを描画する前に必ずこのモーダルを表示する
+    overlay.classList.add('open');
+})();
+
+// ===================================================================
+// ピン刺し再検索モード
+// マップ上の空いている場所をクリックすると、その地点を新しい検索中心として
+// 半径1km以内の店舗（駅は常に全件）を再描画する。ピンを1つ刺すたびにクロスヘアは
+// 自動的に解除され、通常のカーソルに戻る（続けて別の場所に刺したい場合は
+// 「📍ピンを刺して再検索」ボタンを再度押してクロスヘアを立て直す）。
+// ===================================================================
+let pinDropMode = false;
+
+function setPinDropMode(active) {
+    pinDropMode = active;
+    const btn = document.getElementById('pinDropBtn');
+    if (btn) {
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-pressed', String(active));
+    }
+    map.getContainer().style.cursor = active ? 'crosshair' : '';
+    setStationMarkersInteractive(!active);
+}
+
+// 駅ピンのクリック可否を一括で切り替える。ピン刺しモード中は駅ピン自身のクリックを
+// 無効化し（pointer-events:none で地図側にクリックを素通しする）、駅の位置にも
+// 検索ピンを刺せるようにする。モード解除時はクリック可能な状態に戻す。
+function setStationMarkersInteractive(interactive) {
+    stationMarkerMap.forEach(marker => {
+        const el = marker.getElement();
+        if (el) el.style.pointerEvents = interactive ? '' : 'none';
+    });
+}
+
+(function initPinDropMode() {
+    const btn = document.getElementById('pinDropBtn');
+    if (!btn) return;
+
+    btn.addEventListener('click', function() {
+        if (pinDropMode) {
+            // クロスヘアをOFFにするのと同時に、ピン刺しモード自体を終了してフィルターモードへ戻る
+            setPinDropMode(false);
+            exitPinMode();
+        } else {
+            setPinDropMode(true);
+        }
+    });
+
+    map.on('click', function(e) {
+        if (!pinDropMode) return;
+        try {
+            setSearchPin(e.latlng.lat, e.latlng.lng);
+            // ピンを刺したらクロスヘアを解除し、通常のカーソルに戻す
+            // （ピン自体・検索結果は残したまま、次のクリックが誤ってピンを動かさないようにする）
+            setPinDropMode(false);
+        } catch (err) {
+            console.warn('[ラーメンマップ] ピン刺し再検索中にエラーが発生しました:', err.message);
+        }
+    });
+
+    const clearBtn = document.getElementById('pinClearBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            if (!isPinModeActive) return;
+            setPinDropMode(false);
+            exitPinMode();
+        });
+    }
 })();
