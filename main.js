@@ -355,8 +355,11 @@ function getDeviceId() {
 }
 const DEVICE_ID = getDeviceId();
 
+// 管理者ログイン状態はタブ（セッション）単位で保持する。localStorageだと一度ログイン
+// すると期限なく残り続け、後で（別の日に）開いたときも管理者モードのままになって
+// しまうため、ブラウザ／タブを閉じたら自動的にログアウトされるsessionStorageを使う。
 function isAdminLoggedIn() {
-    return localStorage.getItem(ADMIN_STORAGE_KEY) === 'true';
+    return sessionStorage.getItem(ADMIN_STORAGE_KEY) === 'true';
 }
 
 // Web Crypto APIでテキストをSHA-256ハッシュ化し、16進文字列で返す
@@ -388,7 +391,7 @@ async function submitAdminPassword() {
     const hash = await sha256Hex(input.value);
     if (hash === ADMIN_PASS_HASH) {
         closeAdminPasswordModal();
-        localStorage.setItem(ADMIN_STORAGE_KEY, 'true');
+        sessionStorage.setItem(ADMIN_STORAGE_KEY, 'true');
         alert('管理者権限を有効化しました');
         location.reload();
     } else {
@@ -399,7 +402,7 @@ async function submitAdminPassword() {
 }
 
 function adminLogout() {
-    localStorage.removeItem(ADMIN_STORAGE_KEY);
+    sessionStorage.removeItem(ADMIN_STORAGE_KEY);
     location.reload();
 }
 
