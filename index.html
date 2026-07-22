@@ -170,44 +170,65 @@
             <div class="display-filter-group display-filter-group--always-enabled">
                 <div class="display-filter-group-label">地図表示</div>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterShowStations" checked>
-                    駅を表示
+                    <span class="display-filter-text">駅を表示</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterShowStations" checked>
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterShowStationRadius">
-                    駅500m圏内の円を表示
+                    <span class="display-filter-text">駅500m圏内の円を表示</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterShowStationRadius">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
             </div>
             <div class="display-filter-divider"></div>
             <div class="display-filter-group">
                 <div class="display-filter-group-label">立地タイプ</div>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterNearStation">
-                    駅前・徒歩圏内（駅から500m以内）
+                    <span class="display-filter-text">駅前・徒歩圏内（駅から500m以内）</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterNearStation">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterFarStation">
-                    ロードサイド・郊外型（駅から500m超）
+                    <span class="display-filter-text">ロードサイド・郊外型（駅から500m超）</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterFarStation">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
             </div>
             <div class="display-filter-divider"></div>
             <div class="display-filter-group">
                 <div class="display-filter-group-label">駐車場</div>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterParkingYes">
-                    駐車場あり
+                    <span class="display-filter-text">駐車場あり</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterParkingYes">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterParkingNo">
-                    駐車場なし
+                    <span class="display-filter-text">駐車場なし</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterParkingNo">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
             </div>
             <div class="display-filter-divider"></div>
             <div class="display-filter-group">
                 <div class="display-filter-group-label">営業時間</div>
                 <label class="display-filter-item">
-                    <input type="checkbox" id="filterLateNight">
-                    深夜営業型（22時以降も営業）
+                    <span class="display-filter-text">深夜営業型（22時以降も営業）</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="filterLateNight">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
             </div>
         </div>
@@ -218,7 +239,6 @@
         <h2>東葛エリア ラーメン店マップ</h2>
         <p><span class="shop-count">対象: 柏市・松戸市・流山市・我孫子市</span></p>
         <p style="margin-top:8px; font-size:11px; color:#999;">ピンをクリックで詳細を表示</p>
-        <p class="update-date">店舗データ: Googleスプレッドシートと連携</p>
     </div>
 
     <!-- 凡例（右下・折りたたみ式） -->

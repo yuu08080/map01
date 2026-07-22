@@ -213,15 +213,73 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 .display-filter-item {
     display: flex;
     align-items: center;
-    gap: 7px;
+    justify-content: space-between;
+    gap: 10px;
     font-size: 12.5px;
     color: #333;
-    padding: 5px 0;
+    padding: 6px 0;
     cursor: pointer;
     line-height: 1.4;
 }
 
-.display-filter-item input[type="checkbox"] { cursor: pointer; }
+.display-filter-text {
+    flex: 1;
+}
+
+/* トグルスイッチ本体（iOS風・アニメーション付き） */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+}
+
+/* 標準チェックボックスは非表示にし、状態の保持とクリック判定だけに使う */
+.toggle-switch input[type="checkbox"] {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #ccc;
+    border-radius: 999px;
+    transition: background-color 0.25s ease;
+    pointer-events: none;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    transition: transform 0.25s ease;
+}
+
+/* ON状態：アクセントカラー（マップの国道6号ラインと同じ青）に切り替え、丸を右へスライド */
+.toggle-switch input[type="checkbox"]:checked + .toggle-slider {
+    background: #3498db;
+}
+
+.toggle-switch input[type="checkbox"]:checked + .toggle-slider::before {
+    transform: translateX(16px);
+}
+
+.toggle-switch input[type="checkbox"]:focus-visible + .toggle-slider {
+    outline: 2px solid #3498db;
+    outline-offset: 2px;
+}
 
 .display-filter-divider {
     border-top: 1px solid #e5e5e5;
@@ -235,8 +293,15 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     filter: grayscale(0.4);
 }
 
-.display-filter-body.disabled .display-filter-group:not(.display-filter-group--always-enabled) .display-filter-item,
-.display-filter-item input[type="checkbox"]:disabled {
+.display-filter-body.disabled .display-filter-group:not(.display-filter-group--always-enabled) .display-filter-item {
+    cursor: not-allowed;
+}
+
+.toggle-switch input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
+.toggle-switch input[type="checkbox"]:disabled + .toggle-slider {
     cursor: not-allowed;
 }
 
